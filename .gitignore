@@ -17,3 +17,6 @@ test-results/
 *.log
 *.zip
 .DS_Store
+
+# Original AI session journals can contain confidential data; never publish them.
+*.jsonl

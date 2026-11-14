@@ -1,4 +1,8 @@
 from fastapi import APIRouter
 
-# Domain routers are registered here as their features are implemented.
+from app.modules.admin.router import router as admin_router
+from app.modules.auth.router import router as auth_router
+
 router = APIRouter(prefix="/api")
+router.include_router(auth_router)
+router.include_router(admin_router)

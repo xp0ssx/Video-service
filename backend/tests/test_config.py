@@ -36,3 +36,17 @@ def test_s3_secret_minimum(settings, length):
         assert "x" * length not in str(error.value)
     else:
         assert len(Settings(_env_file=None, **values).s3_secret_key.get_secret_value()) == length
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["http://public.example", "https://public.example/path", "https://user:pass@example.com"],
+)
+def test_public_insecure_origin_rejected(settings, origin):
+    with pytest.raises(ValidationError):
+        Settings(**{**settings.model_dump(), "app_origin": origin})
+
+
+@pytest.mark.parametrize("origin", ["https://video.example", "HTTPS://video.example"])
+def test_https_cookie_secure(settings, origin):
+    assert Settings(**{**settings.model_dump(), "app_origin": origin}).cookie_secure

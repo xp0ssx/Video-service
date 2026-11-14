@@ -1,6 +1,7 @@
 name: video-service
 
 x-environment: &environment
+  APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
   POSTGRES_HOST: db
   POSTGRES_PORT: "5432"
   POSTGRES_DB: ${POSTGRES_DB:-video_service}
@@ -11,6 +12,20 @@ x-environment: &environment
   S3_REGION: ${S3_REGION:-us-east-1}
   S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Run python3 scripts/prepare_env.py first}
   S3_SECRET_KEY: ${S3_SECRET_KEY:?Run python3 scripts/prepare_env.py first}
+
+# Test credentials are generated separately by scripts/run_checks.py.
+x-test-environment: &test-environment
+  APP_ORIGIN: http://localhost:8080
+  POSTGRES_HOST: test-db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: video_service_test
+  POSTGRES_USER: video_service_test
+  POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-}
+  S3_ENDPOINT_URL: http://test-storage:8333
+  S3_BUCKET: video-test-media
+  S3_REGION: us-east-1
+  S3_ACCESS_KEY: ${TEST_S3_ACCESS_KEY:-}
+  S3_SECRET_KEY: ${TEST_S3_SECRET_KEY:-}
 
 x-backend: &backend
   image: video-service-backend:0.1.0
@@ -123,6 +138,81 @@ services:
     cap_drop: [ALL]
     restart: unless-stopped
 
+  test-db:
+    profiles: [checks]
+    image: postgres:17-bookworm@sha256:40865bc877a289da75963d97d72b59633f639fc5af7a4e856bfa3714cae5b536
+    environment:
+      POSTGRES_DB: video_service_test
+      POSTGRES_USER: video_service_test
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-}
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8
+    tmpfs: [/var/lib/postgresql/data]
+    networks: [test-data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  test-storage:
+    profiles: [checks]
+    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
+    command:
+      - mini
+      - -dir=/data
+      - -ip=test-storage
+      - -ip.bind=0.0.0.0
+      - -s3.config=/etc/seaweedfs/private-s3.json
+      - -s3.iam=false
+      - -s3.autoCreateBucket=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -webdav=false
+      - -admin.ui=false
+      - -master.telemetry=false
+    tmpfs: [/data]
+    volumes:
+      - type: bind
+        source: ./.local/tests/s3.json
+        target: /etc/seaweedfs/private-s3.json
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [test-data]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9333/cluster/status']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  test-migrate:
+    <<: *backend
+    profiles: [checks]
+    environment: *test-environment
+    networks: [test-data]
+    command: [alembic, upgrade, head]
+    healthcheck:
+      disable: true
+    depends_on:
+      test-db:
+        condition: service_healthy
+
+  test-storage-init:
+    <<: *backend
+    profiles: [checks]
+    environment:
+      <<: *test-environment
+      S3_ADMIN_ACCESS_KEY: ${TEST_S3_ADMIN_ACCESS_KEY:-}
+      S3_ADMIN_SECRET_KEY: ${TEST_S3_ADMIN_SECRET_KEY:-}
+    networks: [test-data]
+    command: [python, -m, app.cli.storage_init]
+    healthcheck:
+      disable: true
+    depends_on:
+      test-storage:
+        condition: service_healthy
+
   checks:
     profiles: [checks]
     image: video-service-backend-checks:0.1.0
@@ -131,18 +221,17 @@ services:
       target: test
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     environment:
-      <<: *environment
+      <<: *test-environment
       RUN_INTEGRATION: "1"
       RUFF_CACHE_DIR: /tmp/video-service-ruff
-      S3_ADMIN_ACCESS_KEY: ${S3_ADMIN_ACCESS_KEY:?Run python3 scripts/prepare_env.py first}
-      S3_ADMIN_SECRET_KEY: ${S3_ADMIN_SECRET_KEY:?Run python3 scripts/prepare_env.py first}
-      S3_PROBE_STATE: /checks/s3-probe.json
-    volumes:
-      - ./.local/checks:/checks
-    networks: [data]
+      S3_ADMIN_ACCESS_KEY: ${TEST_S3_ADMIN_ACCESS_KEY:-}
+      S3_ADMIN_SECRET_KEY: ${TEST_S3_ADMIN_SECRET_KEY:-}
+    networks: [test-data]
     depends_on:
-      api:
-        condition: service_healthy
+      test-migrate:
+        condition: service_completed_successfully
+      test-storage-init:
+        condition: service_completed_successfully
     healthcheck:
       disable: true
     command: [pytest, -p, no:cacheprovider]
@@ -164,4 +253,6 @@ networks:
   app:
     internal: true
   data:
+    internal: true
+  test-data:
     internal: true

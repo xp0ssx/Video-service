@@ -1,12 +1,35 @@
 from functools import lru_cache
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=None, extra="ignore", hide_input_in_errors=True)
+
+    app_origin: str = "http://localhost:8080"
+
+    @model_validator(mode="after")
+    def validate_origin(self):
+        url = urlsplit(self.app_origin)
+        if (
+            url.scheme not in {"http", "https"}
+            or not url.hostname
+            or url.path
+            or url.query
+            or url.fragment
+            or url.username
+            or url.password
+            or (url.scheme == "http" and url.hostname not in {"localhost", "127.0.0.1", "::1"})
+        ):
+            raise ValueError("APP_ORIGIN must be an HTTPS origin or local HTTP origin")
+        return self
+
+    @property
+    def cookie_secure(self) -> bool:
+        return urlsplit(self.app_origin).scheme == "https"
 
     postgres_host: str = "db"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
