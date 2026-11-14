@@ -1,0 +1,167 @@
+name: video-service
+
+x-environment: &environment
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-video_service}
+  POSTGRES_USER: ${POSTGRES_USER:-video_service}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python3 scripts/prepare_env.py first}
+  S3_ENDPOINT_URL: http://storage:8333
+  S3_BUCKET: ${S3_BUCKET:-video-media}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Run python3 scripts/prepare_env.py first}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?Run python3 scripts/prepare_env.py first}
+
+x-backend: &backend
+  image: video-service-backend:0.1.0
+  build:
+    context: ./backend
+    target: runtime
+  environment: *environment
+  networks: [data]
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+
+services:
+  db:
+    image: postgres:17-bookworm@sha256:40865bc877a289da75963d97d72b59633f639fc5af7a4e856bfa3714cae5b536
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-video_service}
+      POSTGRES_USER: ${POSTGRES_USER:-video_service}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python3 scripts/prepare_env.py first}
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  storage:
+    image: chrislusf/seaweedfs:4.53@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
+    command:
+      - mini
+      - -dir=/data
+      - -ip=storage
+      - -ip.bind=0.0.0.0
+      - -s3.config=/etc/seaweedfs/private-s3.json
+      - -s3.iam=false
+      - -s3.autoCreateBucket=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -webdav=false
+      - -admin.ui=false
+      - -master.telemetry=false
+    volumes:
+      - media_data:/data
+      - type: bind
+        source: ./.local/seaweedfs/s3.json
+        target: /etc/seaweedfs/private-s3.json
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [data]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9333/cluster/status']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  migrate:
+    <<: *backend
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  storage-init:
+    <<: *backend
+    command: [python, -m, app.cli.storage_init]
+    environment:
+      <<: *environment
+      S3_ADMIN_ACCESS_KEY: ${S3_ADMIN_ACCESS_KEY:?Run python3 scripts/prepare_env.py first}
+      S3_ADMIN_SECRET_KEY: ${S3_ADMIN_SECRET_KEY:?Run python3 scripts/prepare_env.py first}
+    depends_on:
+      storage:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: "no"
+
+  api:
+    <<: *backend
+    networks: [app, data]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    image: video-service-frontend:0.1.0
+    build:
+      context: ./frontend
+      target: runtime
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    networks: [edge, app]
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  checks:
+    profiles: [checks]
+    image: video-service-backend-checks:0.1.0
+    build:
+      context: ./backend
+      target: test
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      <<: *environment
+      RUN_INTEGRATION: "1"
+      RUFF_CACHE_DIR: /tmp/video-service-ruff
+      S3_ADMIN_ACCESS_KEY: ${S3_ADMIN_ACCESS_KEY:?Run python3 scripts/prepare_env.py first}
+      S3_ADMIN_SECRET_KEY: ${S3_ADMIN_SECRET_KEY:?Run python3 scripts/prepare_env.py first}
+      S3_PROBE_STATE: /checks/s3-probe.json
+    volumes:
+      - ./.local/checks:/checks
+    networks: [data]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    command: [pytest, -p, no:cacheprovider]
+
+  frontend-checks:
+    profiles: [checks]
+    image: video-service-frontend-checks:0.1.0
+    build:
+      context: ./frontend
+      target: build
+    command: [sh, -c, 'npm run typecheck && npm run build']
+
+volumes:
+  postgres_data:
+  media_data:
+
+networks:
+  edge: {}
+  app:
+    internal: true
+  data:
+    internal: true
