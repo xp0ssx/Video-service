@@ -27,6 +27,12 @@ def ready(request: Request) -> JSONResponse:
             # Driver exception messages may contain DSNs, keys or request headers.
             logger.warning("Readiness dependency failed: %s", name)
             checks[name] = "error"
+    if request.app.state.settings.worker_required:
+        try:
+            request.app.state.database.check_worker_ready()
+            checks["worker"] = "ok"
+        except Exception:
+            checks["worker"] = "error"
     healthy = all(value == "ok" for value in checks.values())
     return JSONResponse(
         status_code=200 if healthy else 503,

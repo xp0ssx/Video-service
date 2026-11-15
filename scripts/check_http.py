@@ -39,9 +39,9 @@ def check_http(base_url: str) -> None:
     if json.loads(live).get("status") != "ok":
         raise RuntimeError("Liveness failed")
     ready, _ = read("/health/ready")
-    if json.loads(ready).get("checks") != {"database": "ok", "storage": "ok"}:
-        raise RuntimeError("PostgreSQL/S3 readiness failed")
-    print("OK liveness and real PostgreSQL/migration/S3 readiness")
+    if json.loads(ready).get("checks") != {"database": "ok", "storage": "ok", "worker": "ok"}:
+        raise RuntimeError("PostgreSQL/S3/worker readiness failed")
+    print("OK liveness and real PostgreSQL/migration/S3/worker readiness")
 
     try:
         read("/api/__missing__")

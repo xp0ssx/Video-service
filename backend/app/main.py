@@ -40,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.request_id = uuid.uuid4().hex
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
-        if request.url.path.startswith(("/api/auth", "/api/admin")):
+        if request.url.path.startswith(("/api/",)):
             response.headers["Cache-Control"] = "private, no-store"
         return response
 

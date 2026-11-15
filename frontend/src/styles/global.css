@@ -62,3 +62,18 @@ button:disabled { opacity: .5; cursor: wait; }
 .auth-form input { padding: 12px; border: 1px solid #aaa; border-radius: 8px; min-width: 0; width: 100%; }
 [role=alert] { color: #ac1010; }
 @media (max-width: 700px) { .docs-link { display: none; } .account { font-size: 12px; margin-right: 0; } }
+
+.video-form {max-width:720px;margin:auto;}
+.video-form form, .studio-item form {display:grid;gap:16px;margin:20px 0;}
+.video-form label, .studio-item label {display:grid;gap:7px;}
+.video-form input, .video-form textarea, .video-form select, .studio-item input, .studio-item textarea, .studio-item select {width:100%;min-width:0;padding:10px;border:1px solid #aaa;border-radius:7px;font:inherit;}
+textarea {min-height:100px;resize:vertical;}
+progress {width:100%;height:20px;}
+.studio-item {border:1px solid #ddd;border-radius:12px;padding:20px;margin:20px 0;overflow-wrap:anywhere;}
+summary {cursor:pointer;margin-top:16px;}
+.access-editor {border-top:1px solid #ddd;padding-top:12px;}
+.access-editor li {margin:10px 0;}
+.watch-page {max-width:1100px;margin:auto;}
+.watch-page video {width:100%;max-height:70vh;background:#111;border-radius:12px;}
+.watch-page h1 {margin-top:20px;overflow-wrap:anywhere;}
+.video-description {white-space:pre-wrap;overflow-wrap:anywhere;}

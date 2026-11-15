@@ -48,4 +48,4 @@ def test_openapi_and_swagger_are_available(client):
 
 
 def test_unimplemented_api_is_not_a_fake_success(client):
-    assert client.get("/api/videos").status_code == 404
+    assert client.get("/api/not-implemented").status_code == 404

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     def cookie_secure(self) -> bool:
         return urlsplit(self.app_origin).scheme == "https"
 
+    max_upload_bytes: int = Field(default=500 * 1024 * 1024, ge=1, le=500 * 1024 * 1024)
+    scratch_dir: str = "/tmp/video-service"
+    scratch_min_free_bytes: int = Field(default=2 * 1024**3, ge=0)
+    worker_required: bool = False
+
     postgres_host: str = "db"
     postgres_port: int = Field(default=5432, ge=1, le=65535)
     postgres_db: str = "video_service"

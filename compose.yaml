@@ -2,6 +2,10 @@ name: video-service
 
 x-environment: &environment
   APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+  SCRATCH_DIR: /scratch
+  WORKER_REQUIRED: "true"
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-524288000}
+  SCRATCH_MIN_FREE_BYTES: ${SCRATCH_MIN_FREE_BYTES:-2147483648}
   POSTGRES_HOST: db
   POSTGRES_PORT: "5432"
   POSTGRES_DB: ${POSTGRES_DB:-video_service}
@@ -113,8 +117,29 @@ services:
       disable: true
     restart: "no"
 
+  worker:
+    <<: *backend
+    command: [python, -m, app.worker.main]
+    volumes: [worker_scratch:/scratch]
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 128
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      storage-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -m, app.worker.health]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
   api:
     <<: *backend
+    volumes: [api_scratch:/scratch]
     networks: [app, data]
     depends_on:
       migrate:
@@ -247,6 +272,8 @@ services:
 volumes:
   postgres_data:
   media_data:
+  api_scratch:
+  worker_scratch:
 
 networks:
   edge: {}

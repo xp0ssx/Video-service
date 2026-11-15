@@ -9,6 +9,7 @@ class Database:
         self.engine = create_engine(
             settings.database_url,
             pool_pre_ping=True,
+            hide_parameters=True,
             pool_size=5,
             max_overflow=5,
             connect_args={"connect_timeout": 3},
@@ -22,6 +23,16 @@ class Database:
             connection.execute(text("SELECT 1"))
             if not connection.execute(text("SELECT version_num FROM alembic_version")).first():
                 raise RuntimeError("Database migrations have not been applied")
+
+    def check_worker_ready(self):
+        with self.engine.connect() as connection:
+            if not connection.execute(
+                text(
+                    "SELECT 1 FROM worker_heartbeats WHERE worker_id='main' "
+                    "AND last_seen_at > now() - interval '45 seconds'"
+                )
+            ).first():
+                raise RuntimeError("Worker heartbeat expired")
 
     def close(self) -> None:
         self.engine.dispose()
