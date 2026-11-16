@@ -18,7 +18,7 @@ class FeedRepository:
     def __init__(self, db):
         self.db = db
 
-    def page(self, query, after, limit):
+    def page(self, query, after, limit, channel_id=None):
         statement = (
             select(
                 Video.id,
@@ -37,6 +37,8 @@ class FeedRepository:
                 Video.published_at.is_not(None),
             )
         )
+        if channel_id is not None:
+            statement = statement.where(Video.channel_id == channel_id)
         if query:
             statement = statement.where(Video.title.ilike(title_pattern(query), escape="!"))
         if after:
@@ -50,14 +52,14 @@ class FeedService:
     def __init__(self, factory):
         self.factory = factory
 
-    def page(self, query, cursor, limit):
+    def page(self, query, cursor, limit, channel_id=None):
         query = query.strip()
         if "\x00" in query:
             raise HTTPException(422, "Недопустимый поисковый запрос")
-        scope = "feed:" + hashlib.sha256(query.encode()).hexdigest()
+        scope = f"feed:{channel_id or 'all'}:" + hashlib.sha256(query.encode()).hexdigest()
         after = decode_cursor(cursor, scope)
         with self.factory() as db:
-            rows = FeedRepository(db).page(query, after, limit)
+            rows = FeedRepository(db).page(query, after, limit, channel_id)
             page = rows[:limit]
             return {
                 "items": [

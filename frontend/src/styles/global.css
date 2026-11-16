@@ -134,3 +134,17 @@ summary {cursor:pointer;margin-top:16px;}
 }
 
 @media (max-width:700px) { .brand {font-size:16px;gap:7px;white-space:nowrap;} .brand-mark {width:28px;height:24px;} }
+
+.channel-page h1, .playlist-page h1 {overflow-wrap:anywhere;}
+.channel-page h2 {margin-top:28px;}
+.channel-list {display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:20px;margin:20px 0;}
+.channel-list article {min-width:0;overflow-wrap:anywhere;padding:12px;border:1px solid #eee;border-radius:10px;}
+.channel-thumbnail {width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px;display:block;margin-bottom:10px;}
+.metadata-form {display:grid;gap:14px;max-width:700px;margin:20px 0;}
+.metadata-form label {display:grid;gap:8px;}
+.metadata-form input,.metadata-form textarea,.playlist-page select {width:100%;min-width:0;font:inherit;padding:10px;border:1px solid #aaa;border-radius:8px;}
+.playlist-page fieldset {min-width:0;margin:20px 0;border:1px solid #ddd;}
+.playlist-editor {padding-left:24px;}
+.playlist-editor li {overflow-wrap:anywhere;margin:16px 0;}
+.playlist-editor button {margin:5px;}
+.delete-playlist {margin-top:24px;background:#a11;}

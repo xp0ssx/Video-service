@@ -52,7 +52,7 @@ export function Account() {
     } finally { setBusy(false) }
   }
   if (loading) return <span>Загрузка…</span>
-  return <div className="account">{session ? <><span>{session.user.username}</span><button disabled={busy} onClick={logout}>Выйти</button></> : <><Link to="/login">Войти</Link><Link to="/register">Регистрация</Link></>}{error && <span role="alert">{error}</span>}</div>
+  return <div className="account">{session ? <><Link to={`/channels/${session.user.username}`}><span>{session.user.username}</span></Link><button disabled={busy} onClick={logout}>Выйти</button></> : <><Link to="/login">Войти</Link><Link to="/register">Регистрация</Link></>}{error && <span role="alert">{error}</span>}</div>
 }
 export function AuthForm({register = false}: {register?: boolean}) {
   const {update} = useAuth()

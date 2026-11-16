@@ -270,7 +270,7 @@ export function StudioPage() {
     }
     if (loading) return <p>Загрузка…</p>;
     if (!session) return <LoginRequired/>;
-    return <section><h1>Studio</h1><p><Link to="/upload">Загрузить видео</Link></p>
+    return <section><h1>Studio</h1><p><Link to="/studio/playlists">Управлять плейлистами</Link></p><p><Link to="/upload">Загрузить видео</Link></p>
       <button disabled={busy} onClick={() => void loadPage(false)}>Обновить список</button>
       {error && <p role="alert">{error}</p>}
       {!videos.length && !busy && <p>У вас пока нет видео.</p>}
@@ -291,5 +291,5 @@ export function WatchPage() {
         return <p role="alert">{error}</p>;
     if (!video)
         return <p>Загрузка видео…</p>;
-    return <section className="watch-page"><video key={id} controls playsInline preload="metadata" poster={`/api/videos/${id}/thumbnail`} src={`/api/videos/${id}/media`} onError={() => setPlayError('Не удалось воспроизвести видео. Возможно, доступ изменился; обновите страницу.')} aria-label={video.title}/>{playError && <p role="alert">{playError}</p>}<h1>{video.title}</h1><p>Автор: {video.author}</p><p className="video-description">{video.description}</p>{session?.user.username === video.author && <Link to="/studio">Управлять видео в Studio</Link>}<VideoInteractions key={`${video.id}:${session?.user.id || "guest"}`} id={video.id} initial={{likes_count: video.likes_count || 0, liked_by_me: !!video.liked_by_me}} onUnavailable={() => setError("Видео не найдено или недоступно")}/></section>;
+    return <section className="watch-page"><video key={id} controls playsInline preload="metadata" poster={`/api/videos/${id}/thumbnail`} src={`/api/videos/${id}/media`} onError={() => setPlayError('Не удалось воспроизвести видео. Возможно, доступ изменился; обновите страницу.')} aria-label={video.title}/>{playError && <p role="alert">{playError}</p>}<h1>{video.title}</h1><p>Автор: <Link to={`/channels/${video.author}`}>{video.author}</Link></p><p className="video-description">{video.description}</p>{session?.user.username === video.author && <Link to="/studio">Управлять видео в Studio</Link>}<VideoInteractions key={`${video.id}:${session?.user.id || "guest"}`} id={video.id} initial={{likes_count: video.likes_count || 0, liked_by_me: !!video.liked_by_me}} onUnavailable={() => setError("Видео не найдено или недоступно")}/></section>;
 }
