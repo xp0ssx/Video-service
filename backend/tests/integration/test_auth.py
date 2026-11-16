@@ -153,8 +153,6 @@ def test_expiry_and_current_database_role(auth):
 
 
 def test_bootstrap_admin_cli_does_not_overwrite(auth, monkeypatch):
-    from fastapi import HTTPException
-
     from app.cli import create_admin
 
     _, factory = auth
@@ -173,8 +171,7 @@ def test_bootstrap_admin_cli_does_not_overwrite(auth, monkeypatch):
         user = db.scalar(select(User).where(User.email == body["email"]))
         assert user.role == "admin"
         original = user.password_hash
-    with pytest.raises(HTTPException):
-        create_admin.main()
+    create_admin.main()
     with factory() as db:
         assert db.scalar(select(User).where(User.email == body["email"])).password_hash == original
 

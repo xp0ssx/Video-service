@@ -11,6 +11,8 @@ class AdminService:
 
     def find(self, username):
         # Exact normalized lookup, consistent with private grants; no unbounded listing.
+        if "\x00" in username:
+            raise HTTPException(422, "Недопустимый username")
         user = self.repository.by_username(normalize(username))
         return [user] if user else []
 
@@ -22,6 +24,9 @@ class AdminService:
             if user.role == "admin":
                 raise HTTPException(403, "Роль администратора изменять нельзя")
             previous = user.role
+            if previous == change.role:
+                self.db.commit()
+                return user
             user.role = change.role
             self.repository.record_role_change(actor.id, user, previous, change.reason)
             self.db.flush()

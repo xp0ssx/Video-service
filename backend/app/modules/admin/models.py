@@ -9,12 +9,19 @@ from app.db.base import Base
 
 class ModerationAction(Base):
     __tablename__ = "moderation_actions"
-    # Only user role changes exist at this stage. Video targets and their FK are added
-    # with the videos migration, so no reference to a nonexistent table is created.
-    __table_args__ = (CheckConstraint("action = 'set_role'", name="action"),)
+    __table_args__ = (
+        CheckConstraint("action IN ('hide','restore','set_role')", name="action"),
+        CheckConstraint(
+            "(action = 'set_role' AND target_user_id IS NOT NULL AND video_id IS NULL) OR "
+            "(action IN ('hide','restore') AND video_id IS NOT NULL AND target_user_id IS "
+            "NULL)",
+            name="target",
+        ),
+    )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     actor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
-    target_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    video_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("videos.id"), index=True)
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     action: Mapped[str] = mapped_column(String(32), default="set_role")
     previous_value: Mapped[str] = mapped_column(String(16))
     new_value: Mapped[str] = mapped_column(String(16))

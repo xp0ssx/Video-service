@@ -148,3 +148,16 @@ summary {cursor:pointer;margin-top:16px;}
 .playlist-editor li {overflow-wrap:anywhere;margin:16px 0;}
 .playlist-editor button {margin:5px;}
 .delete-playlist {margin-top:24px;background:#a11;}
+
+.report-form {margin-top:20px;}
+.report-form select,.moderation-page select {font:inherit;padding:8px;max-width:100%;}
+.moderation-page h1,.moderation-card {overflow-wrap:anywhere;}
+.moderation-page>label,.moderation-card label {display:grid;gap:10px;margin:16px 0;}
+.moderation-page textarea {width:100%;min-width:0;font:inherit;padding:10px;border:1px solid #aaa;border-radius:8px;}
+.moderation-card {border:1px solid #ddd;border-radius:10px;padding:18px;margin:20px 0;min-width:0;}
+.moderation-card h2 {font-size:18px;}
+.moderation-buttons {display:flex;flex-wrap:wrap;gap:12px;}
+
+/* Keep admin identities inside the available width, including 32-character usernames. */
+.moderation-page,.admin-user-card {min-width:0;}
+.admin-user-card {overflow-wrap:anywhere;}

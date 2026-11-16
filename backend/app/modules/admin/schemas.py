@@ -13,7 +13,7 @@ class RoleChange(BaseModel):
     @classmethod
     def trim_reason(cls, value: str) -> str:
         value = value.strip()
-        if not value:
+        if not value or "\x00" in value:
             raise ValueError("Reason is required")
         return value
 

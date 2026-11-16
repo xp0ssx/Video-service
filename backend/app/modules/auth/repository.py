@@ -10,6 +10,9 @@ class AuthRepository:
     def __init__(self, db: DatabaseSession):
         self.db = db
 
+    def by_username(self, username):
+        return self.db.scalar(select(User).where(User.username == username))
+
     def by_email(self, email: str):
         return self.db.scalar(select(User).where(User.email == email))
 

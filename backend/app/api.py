@@ -4,6 +4,7 @@ from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.channels.router import router as channels_router
 from app.modules.interactions.router import router as interactions_router
+from app.modules.moderation.router import router as moderation_router
 from app.modules.videos.router import router as videos_router
 
 router = APIRouter(prefix="/api")
@@ -15,3 +16,6 @@ router.include_router(videos_router)
 router.include_router(interactions_router)
 
 router.include_router(channels_router)
+
+
+router.include_router(moderation_router)

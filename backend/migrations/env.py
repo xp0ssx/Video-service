@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.modules.admin import models as admin_models  # noqa: F401
 from app.modules.auth import models  # noqa: F401
 from app.modules.interactions import models as interaction_models  # noqa: F401
+from app.modules.moderation import models as report_models  # noqa: F401
 from app.modules.playlists import models as playlist_models  # noqa: F401
 from app.modules.videos import models as video_models  # noqa: F401
 
