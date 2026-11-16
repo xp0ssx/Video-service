@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/Auth';
+import { VideoInteractions } from '../interactions/VideoInteractions';
 type Video = {
+    likes_count?: number;
+    liked_by_me?: boolean;
     id: string;
     title: string;
     description: string;
@@ -288,5 +291,5 @@ export function WatchPage() {
         return <p role="alert">{error}</p>;
     if (!video)
         return <p>Загрузка видео…</p>;
-    return <section className="watch-page"><video key={id} controls playsInline preload="metadata" poster={`/api/videos/${id}/thumbnail`} src={`/api/videos/${id}/media`} onError={() => setPlayError('Не удалось воспроизвести видео. Возможно, доступ изменился; обновите страницу.')} aria-label={video.title}/>{playError && <p role="alert">{playError}</p>}<h1>{video.title}</h1><p>Автор: {video.author}</p><p className="video-description">{video.description}</p>{session?.user.username === video.author && <Link to="/studio">Управлять видео в Studio</Link>}</section>;
+    return <section className="watch-page"><video key={id} controls playsInline preload="metadata" poster={`/api/videos/${id}/thumbnail`} src={`/api/videos/${id}/media`} onError={() => setPlayError('Не удалось воспроизвести видео. Возможно, доступ изменился; обновите страницу.')} aria-label={video.title}/>{playError && <p role="alert">{playError}</p>}<h1>{video.title}</h1><p>Автор: {video.author}</p><p className="video-description">{video.description}</p>{session?.user.username === video.author && <Link to="/studio">Управлять видео в Studio</Link>}<VideoInteractions key={`${video.id}:${session?.user.id || "guest"}`} id={video.id} initial={{likes_count: video.likes_count || 0, liked_by_me: !!video.liked_by_me}} onUnavailable={() => setError("Видео не найдено или недоступно")}/></section>;
 }

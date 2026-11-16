@@ -25,7 +25,7 @@ def test_postgresql_connection_and_migration():
             )
             assert session.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == ("c970a1085bb1")
+            ).scalar_one() == ("694349d098b8")
     finally:
         database.close()
 

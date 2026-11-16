@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.router import csrf, current, database, origin
 from app.modules.auth.service import digest
+from app.modules.videos.feed import FeedService
 from app.modules.videos.media import byte_range
 from app.modules.videos.schemas import CreateVideo, UpdateVideo
 from app.modules.videos.service import VideoService
@@ -44,6 +45,16 @@ Writer = Annotated[UUID, Depends(writer)]
 Owner = Annotated[UUID, Depends(owner)]
 Viewer = Annotated[UUID | None, Depends(viewer)]
 Service = Annotated[VideoService, Depends(service)]
+
+
+@router.get("/videos")
+def feed(
+    request: Request,
+    q: Annotated[str, Query(max_length=200)] = "",
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    return FeedService(request.app.state.database.session_factory).page(q, cursor, limit)
 
 
 @router.post("/videos", status_code=201, dependencies=[Depends(origin)])

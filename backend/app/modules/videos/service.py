@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.modules.access.policy import can_watch
 from app.modules.auth.models import Channel, User
 from app.modules.auth.schemas import normalize
+from app.modules.interactions.repository import InteractionRepository
 from app.modules.videos.models import Video, VideoAccess, VideoAsset, VideoJob
 from app.modules.videos.repository import VideoRepository
 
@@ -109,7 +110,9 @@ class VideoService:
                 return {
                     key: getattr(asset, key) for key in ("object_key", "content_type", "size_bytes")
                 }
-            return view(db, video)
+            result = view(db, video)
+            result.update(InteractionRepository(db).like_state(video_id, user_id))
+            return result
 
     def patch(self, user_id, video_id, data):
         with self.factory() as db:

@@ -1,7 +1,14 @@
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 from app.modules.auth.models import Channel
-from app.modules.videos.models import VideoAccess
+from app.modules.videos.models import Video, VideoAccess
+
+
+def public_listing():
+    """SQL public-only branch of the video policy, shared by feed and search."""
+    return and_(
+        Video.status == "ready", Video.moderation_state == "visible", Video.visibility == "public"
+    )
 
 
 def can_watch(db, user_id, video):

@@ -77,3 +77,60 @@ summary {cursor:pointer;margin-top:16px;}
 .watch-page video {width:100%;max-height:70vh;background:#111;border-radius:12px;}
 .watch-page h1 {margin-top:20px;overflow-wrap:anywhere;}
 .video-description {white-space:pre-wrap;overflow-wrap:anywhere;}
+
+/* Public feed/search and watch interactions. */
+.feed-page .page-heading > div {min-width:0;}
+.feed-page .page-heading h1 {overflow-wrap:anywhere;}
+.topbar { gap: 18px; }
+.search-bar {display:flex;flex:1;max-width:620px;margin:0 auto;min-width:80px;}
+.search-bar input {min-width:0;width:100%;border:1px solid #c6c6c6;border-radius:24px 0 0 24px;padding:11px 18px;font:inherit;}
+.search-bar button {border-radius:0 24px 24px 0;background:#f7f7f7;color:#222;border:1px solid #c6c6c6;border-left:0;min-width:58px;font-size:23px;padding:4px 16px;}
+.header-upload {white-space:nowrap;background:#f2f2f2;border-radius:20px;padding:10px 14px;font-size:13px;}
+.topbar .account {margin:0;gap:10px;}
+.video-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:32px 20px;margin-top:30px;}
+.video-card {min-width:0;}
+.card-thumbnail {position:relative;aspect-ratio:16/9;overflow:hidden;background:#efefef;border-radius:12px;}
+.card-thumbnail img {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.thumbnail-placeholder {position:absolute;top:40%;left:47%;color:#bbb;}
+.duration {position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.8);color:#fff;font-size:12px;font-weight:650;padding:3px 5px;border-radius:4px;}
+.video-card h2 {font-size:16px;line-height:1.4;margin:12px 0 9px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.card-channel {display:flex;gap:10px;align-items:center;color:#606060;font-size:13px;min-width:0;}
+.card-channel p {margin:2px 0;overflow-wrap:anywhere;}
+.channel-avatar {width:32px;height:32px;border-radius:50%;background:#eceaf9;color:#665387;display:grid;place-items:center;flex-shrink:0;font-weight:700;}
+.card-date {font-size:12px;color:#777;}
+.feed-status {text-align:center;padding:25px;color:#666;}
+.feed-error {margin-top:24px;padding:16px;border-radius:10px;background:#fff0f0;}
+.load-more {display:block;margin:32px auto;}
+.inline-action {display:inline-block;margin-top:20px;color:#2859ad;}
+.video-interactions {margin-top:22px;border-top:1px solid #e8e8e8;padding-top:20px;}
+.like-row {display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:14px;margin-bottom:30px;}
+.like-button {background:#f1f1f1;color:#222;border:1px solid transparent;min-width:85px;font-size:16px;}
+.like-button[aria-pressed=true] {background:#222;color:#fff;}
+.like-row a {color:#2859ad;}
+.comment-form {display:grid;gap:12px;margin:20px 0;}
+.comment-form label {display:grid;gap:10px;}
+.comment-form textarea {border:1px solid #bbb;border-radius:10px;padding:12px;font:inherit;min-height:90px;width:100%;}
+.comment-form button {justify-self:end;}
+.comments-list {list-style:none;padding:0;margin:24px 0;}
+.comment {padding:16px 0;border-bottom:1px solid #f1f1f1;}
+.comment-meta {display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;font-size:14px;}
+.comment-meta time {color:#777;font-size:12px;}
+.comment-body {white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;margin:8px 0 0;}
+@media (min-width:1600px) {.video-grid {grid-template-columns:repeat(4,minmax(0,1fr));}}
+@media (max-width:1100px) {.docs-link {display:none;}.brand {font-size:18px;}.header-upload {font-size:12px;padding:9px;}.topbar {padding:0 18px;gap:12px;}}
+@media (max-width:700px) {
+  .app-shell {grid-template-rows:112px auto 1fr;}
+  .topbar {display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:54px 48px;gap:0 10px;}
+  .topbar .account {grid-column:2;grid-row:1;gap:8px;font-size:11px;max-width:190px;min-width:0;flex-wrap:nowrap;}
+  .account button {padding:7px 10px;flex-shrink:0;}
+  .account span {min-width:0;overflow-wrap:anywhere;}
+  .search-bar {grid-column:1/-1;grid-row:2;width:100%;max-width:none;}
+  .header-upload {display:none;}
+  .sidebar nav {display:flex;gap:6px;flex-wrap:wrap;}
+  .nav-item {font-size:12px;gap:6px;padding:8px 10px;}
+  .page-heading {align-items:start;}
+  .category-label {display:none;}
+  .video-grid {grid-template-columns:1fr;gap:25px;}
+}
+
+@media (max-width:700px) { .brand {font-size:16px;gap:7px;white-space:nowrap;} .brand-mark {width:28px;height:24px;} }
