@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 
 from app.modules.admin.repository import AdminRepository
-from app.modules.auth.schemas import normalize
+from app.modules.auth.schemas import lookup_username
 
 
 class AdminService:
@@ -11,9 +11,7 @@ class AdminService:
 
     def find(self, username):
         # Exact normalized lookup, consistent with private grants; no unbounded listing.
-        if "\x00" in username:
-            raise HTTPException(422, "Недопустимый username")
-        user = self.repository.by_username(normalize(username))
+        user = self.repository.by_username(lookup_username(username))
         return [user] if user else []
 
     def set_role(self, actor, user_id, change):

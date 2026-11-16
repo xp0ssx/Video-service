@@ -1,5 +1,7 @@
+import re
 import unicodedata
 
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
 
@@ -27,3 +29,11 @@ class Register(Login):
     @classmethod
     def username_normalized(cls, value: str) -> str:
         return normalize(value)
+
+
+def lookup_username(value: str) -> str:
+    """Use registration normalization and alphabet before any username lookup SQL."""
+    value = normalize(value)
+    if not 3 <= len(value) <= 32 or re.fullmatch(r"[a-z0-9_]+", value) is None:
+        raise HTTPException(422, "Недопустимый username")
+    return value

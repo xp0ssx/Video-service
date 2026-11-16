@@ -104,6 +104,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Lock before checking, so concurrent writers cannot invalidate the preflight.
+    bind = op.get_bind()
+    bind.execute(sa.text("LOCK TABLE reports, moderation_actions IN ACCESS EXCLUSIVE MODE"))
+    if bind.scalar(
+        sa.text(
+            "SELECT EXISTS (SELECT 1 FROM reports) OR EXISTS "
+            "(SELECT 1 FROM moderation_actions WHERE action IN ('hide','restore'))"
+        )
+    ):
+        raise RuntimeError(
+            "Downgrade refused: reports or hide/restore audit exist; "
+            "retain the current schema to preserve history. No data were changed."
+        )
     op.drop_constraint(op.f("ck_moderation_actions_target"), "moderation_actions", type_="check")
     op.drop_constraint(op.f("ck_moderation_actions_action"), "moderation_actions", type_="check")
     op.create_check_constraint(

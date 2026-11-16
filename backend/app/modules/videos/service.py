@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.modules.access.policy import can_watch
 from app.modules.auth.models import Channel, User
-from app.modules.auth.schemas import normalize
+from app.modules.auth.schemas import lookup_username
 from app.modules.interactions.repository import InteractionRepository
 from app.modules.videos.models import Video, VideoAccess, VideoAsset, VideoJob
 from app.modules.videos.repository import VideoRepository
@@ -124,6 +124,8 @@ class VideoService:
             return result
 
     def grants(self, user_id, video_id, username=None, remove=False):
+        if username is not None:
+            username = lookup_username(username)
         with self.factory() as db:
             VideoRepository(db).owned(video_id, user_id, True)
             if username is None:
@@ -136,7 +138,7 @@ class VideoService:
                         .order_by(User.username)
                     )
                 ]
-            target = db.scalar(select(User).where(User.username == normalize(username)))
+            target = db.scalar(select(User).where(User.username == username))
             if target is None:
                 raise HTTPException(404, "Пользователь не найден")
             if target.id == user_id:

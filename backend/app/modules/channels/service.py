@@ -4,6 +4,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.pagination import decode_cursor, encode_cursor
 from app.modules.auth.models import Channel, User
+from app.modules.auth.schemas import lookup_username
 from app.modules.channels.repository import ChannelRepository
 from app.modules.playlists.models import Playlist, Subscription
 from app.modules.videos.feed import FeedService
@@ -42,6 +43,7 @@ class ChannelService:
         self.factory = factory
 
     def get(self, username, user_id):
+        username = lookup_username(username)
         with self.factory() as db:
             channel, name = ChannelRepository(db).named(username)
             result = channel_view(channel, name)
@@ -68,6 +70,7 @@ class ChannelService:
         return self.get(name, user_id)
 
     def subscribe(self, username, user_id, enabled):
+        username = lookup_username(username)
         with self.factory() as db:
             channel, _ = ChannelRepository(db).named(username)
             if channel.user_id == user_id:
@@ -90,6 +93,7 @@ class ChannelService:
         return self.get(username, user_id)
 
     def listing(self, username, kind, cursor, limit):
+        username = lookup_username(username)
         with self.factory() as db:
             channel, name = ChannelRepository(db).named(username)
             if kind == "videos":

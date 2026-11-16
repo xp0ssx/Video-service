@@ -29,7 +29,8 @@ class Report(Base):
             "(status = 'open' AND reviewed_by IS NULL AND reviewed_at IS NULL AND "
             "review_note IS NULL AND resolved_action_id IS NULL) OR (status IN "
             "('dismissed','actioned') AND reviewed_by IS NOT NULL AND reviewed_at IS NOT "
-            "NULL AND char_length(review_note) BETWEEN 1 AND 2000 AND (status = "
+            "NULL AND review_note IS NOT NULL AND char_length(review_note) BETWEEN 1 "
+            "AND 2000 AND (status = "
             "'actioned') = (resolved_action_id IS NOT NULL))",
             name="resolution",
         ),
