@@ -6,7 +6,29 @@ export DOCKER_HOST=unix:///var/run/docker.sock
 unset DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH DOCKER_CONFIG
 export DEBIAN_FRONTEND=noninteractive
 stage=preflight
-trap 'printf "Deployment failed at %s (line %s); data/volumes preserved. See .local/deploy.log.\n" "$stage" "$LINENO" >&2' ERR
+deployment_error() {
+    local status=$1 line=$2 source=${BASH_SOURCE[1]} frame reason='command failed'
+    # ERR is inherited by functions. Report run's caller, not its timeout line,
+    # even when run is reached through another function. Never print arguments.
+    for ((frame=1; frame<${#FUNCNAME[@]}; frame++)); do
+        if [[ ${FUNCNAME[$frame]} == run ]]; then
+            line=${BASH_LINENO[$frame]}
+            source=${BASH_SOURCE[$((frame+1))]:-${BASH_SOURCE[1]}}
+            break
+        fi
+    done
+    case "$status" in
+        124) reason='time limit reached or command returned 124' ;;
+        125) reason='timeout wrapper or command failed' ;;
+        126) reason='command could not be invoked or returned 126' ;;
+        127) reason='command not found or returned 127' ;;
+        137) reason='command was killed or returned 137' ;;
+    esac
+    printf 'Deployment failed at %s (%s:%s, exit %s): %s; data/volumes preserved. See .local/deploy.log.\n' \
+        "$stage" "${source##*/}" "$line" "$status" "$reason" >&2
+    exit "$status"
+}
+trap 'deployment_error "$?" "$LINENO"' ERR
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 demo=false
