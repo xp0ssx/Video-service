@@ -261,6 +261,26 @@ services:
       disable: true
     command: [pytest, -p, no:cacheprovider]
 
+  seed:
+    <<: *backend
+    profiles: [demo]
+    user: "0:0"
+    command: [python, -m, app.cli.seed_demo]
+    volumes:
+      - type: bind
+        source: ./.local/demo
+        target: /demo
+        bind:
+          create_host_path: false
+    depends_on:
+      api:
+        condition: service_healthy
+      worker:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+    restart: "no"
+
   frontend-checks:
     profiles: [checks]
     image: video-service-frontend-checks:0.1.0

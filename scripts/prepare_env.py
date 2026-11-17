@@ -66,30 +66,7 @@ def resolve_environment(root: Path, env_path: Path) -> dict[str, str]:
         ) from None
 
 
-def prepare_environment(root: Path = ROOT) -> None:
-    env_path = root / ".env"
-    new_environment = not env_path.exists()
-    if new_environment:
-        template = (root / ".env.example").read_text()
-        for key, length in SECRET_LENGTHS.items():
-            template = template.replace(f"{key}=\n", f"{key}={secrets.token_hex(length)}\n")
-        template = template.replace("LOCAL_UID=1000", f"LOCAL_UID={os.getuid()}")
-        template = template.replace("LOCAL_GID=1000", f"LOCAL_GID={os.getgid()}")
-        # Validate a private temporary candidate before publishing any configuration.
-        with tempfile.TemporaryDirectory(prefix="video-service-env-") as temporary:
-            candidate = Path(temporary) / ".env"
-            write_private(candidate, template, exclusive=True)
-            values = resolve_environment(root, candidate)
-    else:
-        values = resolve_environment(root, env_path)
-    minimums = dict.fromkeys(SECRET_LENGTHS, 16)
-    minimums["S3_SECRET_KEY"] = 32
-    for key, minimum in minimums.items():
-        if len(values.get(key, "")) < minimum:
-            raise SystemExit(f"{key}: требуется минимум {minimum} символов; значение не показано")
-    if new_environment:
-        write_private(env_path, template, exclusive=True)
-
+def storage_configuration(values: dict) -> dict:
     bucket = values.get("S3_BUCKET", "video-media")
     identities = [
         {
@@ -113,11 +90,51 @@ def prepare_environment(root: Path = ROOT) -> None:
             "actions": [f"Read:{bucket}", f"Write:{bucket}", f"List:{bucket}"],
         },
     ]
+    return {"identities": identities}
+
+
+def prepare_environment(
+    root: Path = ROOT, *, resolved_values: dict | None = None, quiet: bool = False
+) -> None:
+    env_path = root / ".env"
+    new_environment = not env_path.exists()
+    if new_environment:
+        template = (root / ".env.example").read_text()
+        for key, length in SECRET_LENGTHS.items():
+            template = template.replace(f"{key}=\n", f"{key}={secrets.token_hex(length)}\n")
+        template = template.replace("LOCAL_UID=1000", f"LOCAL_UID={os.getuid()}")
+        template = template.replace("LOCAL_GID=1000", f"LOCAL_GID={os.getgid()}")
+        # Validate a private temporary candidate before publishing any configuration.
+        with tempfile.TemporaryDirectory(prefix="video-service-env-") as temporary:
+            candidate = Path(temporary) / ".env"
+            write_private(candidate, template, exclusive=True)
+            values = resolve_environment(root, candidate)
+    else:
+        values = (
+            resolved_values if resolved_values is not None else resolve_environment(root, env_path)
+        )
+    minimums = dict.fromkeys(SECRET_LENGTHS, 16)
+    minimums["S3_SECRET_KEY"] = 32
+    for key, minimum in minimums.items():
+        if len(values.get(key, "")) < minimum:
+            raise SystemExit(f"{key}: требуется минимум {minimum} символов; значение не показано")
+    if new_environment:
+        write_private(env_path, template, exclusive=True)
+
     config_dir = root / ".local" / "seaweedfs"
     config_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     (root / ".local" / "checks").mkdir(exist_ok=True, mode=0o700)
-    write_private(config_dir / "s3.json", json.dumps({"identities": identities}, indent=2) + "\n")
-    print("Local configuration ready; existing .env and its secrets preserved")
+    config_path = config_dir / "s3.json"
+    if config_path.is_symlink():
+        raise SystemExit("Refusing symlink S3 configuration")
+    content = json.dumps(storage_configuration(values), indent=2) + "\n"
+    if not config_path.exists() or config_path.read_text() != content:
+        write_private(config_path, content)
+    else:
+        os.chmod(config_path, 0o600)
+
+    if not quiet:
+        print("Local configuration ready; existing .env and its secrets preserved")
 
 
 if __name__ == "__main__":

@@ -3,3 +3,12 @@ dist
 .env*
 *.log
 *.tsbuildinfo
+
+.local/
+.git/
+*.jsonl
+*.mp4
+*.webm
+*.mov
+.codex/
+.agents/

@@ -6,3 +6,12 @@ __pycache__
 .ruff_cache
 .coverage
 *.log
+
+.local/
+.git/
+*.jsonl
+*.mp4
+*.webm
+*.mov
+.codex/
+.agents/

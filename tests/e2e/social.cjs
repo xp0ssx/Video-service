@@ -4,7 +4,7 @@ const {randomUUID}=require('node:crypto');
 const assert=require('node:assert/strict');
 const path=require('node:path');
 const os=require('node:os');
-const base='http://localhost:8080';
+const base=process.env.BASE_URL||'http://localhost:8080';
 (async()=>{
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox','--disable-dev-shm-usage','--autoplay-policy=no-user-gesture-required']});
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
