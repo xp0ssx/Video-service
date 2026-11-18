@@ -2,24 +2,28 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { Icon } from "./Icon";
 import { duration as formatDuration } from "./VideoCard";
+import { useVideoViews } from "../features/videos/useVideoViews";
 export function VideoPlayer({
   id,
   title,
   theater,
   mobile,
   onTheater,
+  onViewCount,
 }: {
   id: string;
   title: string;
   theater: boolean;
   mobile: boolean;
   onTheater: () => void;
+  onViewCount?: (count: number) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null),
     root = useRef<HTMLDivElement>(null),
     settingsButton = useRef<HTMLButtonElement>(null),
     settingsPanel = useRef<HTMLDivElement>(null),
     timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useVideoViews(video, id, onViewCount);
   const [playing, setPlaying] = useState(false),
     [time, setTime] = useState(0),
     [duration, setDuration] = useState(0),

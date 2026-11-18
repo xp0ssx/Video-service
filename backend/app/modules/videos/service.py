@@ -21,7 +21,16 @@ def view(db, video, studio=False, author=None, accepted=None):
     )
     result = {
         key: getattr(video, key)
-        for key in ("id", "title", "description", "visibility", "duration_ms", "width", "height")
+        for key in (
+            "id",
+            "title",
+            "description",
+            "visibility",
+            "duration_ms",
+            "width",
+            "height",
+            "views_count",
+        )
     }
     result["author"] = username
     if studio:
@@ -69,10 +78,11 @@ class VideoService:
                 select(Video)
                 .select_from(Video)
                 .join(Channel, Channel.id == Video.channel_id)
-                .where(Channel.user_id == user_id)
+                .where(Channel.user_id == user_id, Video.deleted_at.is_(None))
             )
             if cursor:
-                reference = repo.owned(cursor, user_id)
+                # A deleted owner's video remains usable only as a pagination anchor.
+                reference = repo.owned(cursor, user_id, include_deleted=True)
                 query = query.where(
                     tuple_(Video.created_at, Video.id) < (reference.created_at, reference.id)
                 )
@@ -224,6 +234,20 @@ class VideoService:
             video.status, video.upload_token, video.upload_expires_at = "queued", None, None
             db.commit()
             return {"id": video_id, "status": "queued"}
+
+    def store_source(self, storage, path, user_id, video_id, token, size, sha):
+        from app.infrastructure.transcoder import LostLease
+        from app.modules.videos.deletion import storage_writer
+
+        key = f"sources/{video_id}/{token}/original"
+        try:
+            with storage_writer(self.factory, video_id):
+                storage.upload(path, key, "application/octet-stream")
+                if storage.head(key)["ContentLength"] != size:
+                    raise HTTPException(503, "Хранилище не подтвердило размер файла")
+                return self.accepted(user_id, video_id, token, key, size, sha)
+        except LostLease:
+            raise HTTPException(404, "Видео не найдено") from None
 
     def upload_failed(self, user_id, video_id, token, code):
         with self.factory() as db:

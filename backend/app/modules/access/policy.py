@@ -7,12 +7,19 @@ from app.modules.videos.models import Video, VideoAccess
 def public_listing():
     """SQL public-only branch of the video policy, shared by feed and search."""
     return and_(
-        Video.status == "ready", Video.moderation_state == "visible", Video.visibility == "public"
+        Video.deleted_at.is_(None),
+        Video.status == "ready",
+        Video.moderation_state == "visible",
+        Video.visibility == "public",
     )
 
 
 def can_watch(db, user_id, video):
-    if video.status != "ready" or video.moderation_state != "visible":
+    if (
+        video.deleted_at is not None
+        or video.status != "ready"
+        or video.moderation_state != "visible"
+    ):
         return False
     if video.visibility == "public":
         return True
@@ -25,6 +32,7 @@ def can_watch(db, user_id, video):
 def watch_listing(user_id):
     """SQL equivalent of can_watch, filtering before pagination/counting."""
     return and_(
+        Video.deleted_at.is_(None),
         Video.status == "ready",
         Video.moderation_state == "visible",
         or_(

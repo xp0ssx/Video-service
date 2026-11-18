@@ -18,7 +18,11 @@ class ModerationRepository:
         return actor
 
     def video(self, identifier):
-        video = self.db.scalar(select(Video).where(Video.id == identifier).with_for_update())
+        video = self.db.scalar(
+            select(Video)
+            .where(Video.id == identifier, Video.deleted_at.is_(None))
+            .with_for_update()
+        )
         if video is None:
             raise HTTPException(404, "Видео не найдено")
         return video

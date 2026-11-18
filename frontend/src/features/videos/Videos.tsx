@@ -1,14 +1,17 @@
 import { VideoPlayer } from "../../components/VideoPlayer";
+import { formatViews } from "../../components/views";
 import { Avatar } from "../../components/Icon";
 import { VideoCard, Thumbnail } from "../../components/VideoCard";
 import type { VideoCardData } from "../../components/VideoCard";
-import type { Page } from "../../api/client";
+import { HttpError, type Page } from "../../api/client";
+import { DeleteVideoDialog } from "./DeleteVideoDialog";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../auth/Auth";
 import { VideoInteractions } from "../interactions/VideoInteractions";
 type Video = {
+  views_count: number;
   likes_count?: number;
   liked_by_me?: boolean;
   id: string;
@@ -56,7 +59,7 @@ async function api(path: string, init?: RequestInit) {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(
+    throw new HttpError(response.status,
       response.status === 404
         ? "Видео не найдено или недоступно"
         : error?.message || `Ошибка запроса (${response.status})`,
@@ -361,13 +364,17 @@ function AccessEditor({ id }: { id: string }) {
 function StudioItem({
   video,
   onUpdate,
+  onDeleted,
 }: {
   video: Video;
   onUpdate: () => void;
+  onDeleted: () => void;
 }) {
   const write = useWrite();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const deleteButton = useRef<HTMLButtonElement>(null);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -404,6 +411,7 @@ function StudioItem({
         )}
       </div>
       <h2>{video.title}</h2>
+      <p>{formatViews(video.views_count)}</p>
       <p>
         {labels[video.status] || video.status} ·{" "}
         {video.visibility === "private" ? "Приватное" : "Публичное"}
@@ -426,6 +434,13 @@ function StudioItem({
         </form>
         <AccessEditor id={video.id} />
       </details>
+      <div className="studio-delete-action">
+        <button ref={deleteButton} className="danger-button" disabled={busy} onClick={() => setDeleting(true)}>
+          Удалить видео
+        </button>
+      </div>
+      {deleting && <DeleteVideoDialog id={video.id} title={video.title}
+        onCancel={() => { setDeleting(false); deleteButton.current?.focus(); }} onDeleted={onDeleted} />}
       {error && <p role="alert">{error}</p>}
       {video.status === "failed" && !video.source_accepted && (
         <RetrySource video={video} onUpdate={onUpdate} />
@@ -482,11 +497,14 @@ export function StudioPage() {
   const [busy, setBusy] = useState(true);
   const generation = useRef(0);
   const polling = useRef(true);
+  const removed = useRef(new Set<string>());
+  const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     let active = true;
     generation.current += 1;
     polling.current = true;
+    removed.current.clear();
     setVideos([]);
     setCursor(null);
     setBusy(true);
@@ -497,7 +515,7 @@ export function StudioPage() {
       api("/me/videos?limit=100")
         .then((value) => {
           if (active && generation.current === started && polling.current) {
-            setVideos(value.items);
+            setVideos(value.items.filter((video: Video) => !removed.current.has(video.id)));
             setCursor(value.next_cursor);
             setError("");
           }
@@ -527,7 +545,8 @@ export function StudioPage() {
       );
       if (generation.current !== started) return;
       setVideos((previous) =>
-        append ? [...previous, ...value.items] : value.items,
+        (append ? [...previous, ...value.items] : value.items)
+          .filter((video: Video) => !removed.current.has(video.id)),
       );
       setCursor(value.next_cursor);
       setError("");
@@ -544,7 +563,7 @@ export function StudioPage() {
   if (!session) return <LoginRequired />;
   return (
     <section className="studio-page">
-      <h1>Studio</h1>
+      <h1 ref={heading} tabIndex={-1}>Studio</h1>
       <p>
         <Link to="/studio/playlists">Управлять плейлистами</Link>
       </p>
@@ -561,6 +580,11 @@ export function StudioPage() {
           key={video.id}
           video={video}
           onUpdate={() => void loadPage(false)}
+          onDeleted={() => {
+            removed.current.add(video.id);
+            setVideos(previous => previous.filter(item => item.id !== video.id));
+            heading.current?.focus();
+          }}
         />
       ))}
       {cursor && (
@@ -698,14 +722,49 @@ export function WatchPage() {
     const controller = new AbortController();
     setVideo(null);
     setError("");
-    api(`/videos/${id}`, { signal: controller.signal })
-      .then((value) => {
-        if (!controller.signal.aborted) setVideo(value);
-      })
-      .catch((failure) => {
-        if (!controller.signal.aborted) setError((failure as Error).message);
-      });
-    return () => controller.abort();
+    let unavailable = false, checking = false;
+    const markUnavailable = () => {
+      unavailable = true;
+      setVideo(null);
+      setError("Видео не найдено или недоступно");
+    };
+    const check = async (initial = false) => {
+      if (checking || unavailable || controller.signal.aborted) return;
+      checking = true;
+      try {
+        const value = await api(`/videos/${id}`, { signal: controller.signal });
+        if (!controller.signal.aborted && !unavailable) setVideo(previous =>
+          previous && previous.id === value.id
+            ? { ...value, views_count: Math.max(previous.views_count, value.views_count) }
+            : value);
+      } catch (failure) {
+        if (!controller.signal.aborted) {
+          if (failure instanceof HttpError && failure.status === 404) markUnavailable();
+          else if (initial) setError((failure as Error).message);
+        }
+      } finally { checking = false; }
+    };
+    const deleted = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === id) markUnavailable();
+    };
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key !== "video-service:deleted" || !event.newValue) return;
+      try { if (JSON.parse(event.newValue).id === id) markUnavailable(); }
+      catch { /* Ignore unrelated malformed local data. */ }
+    };
+    const focused = () => void check();
+    void check(true);
+    const timer = setInterval(() => void check(), 5000);
+    window.addEventListener("video-deleted", deleted);
+    window.addEventListener("storage", storageChanged);
+    window.addEventListener("focus", focused);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      window.removeEventListener("video-deleted", deleted);
+      window.removeEventListener("storage", storageChanged);
+      window.removeEventListener("focus", focused);
+    };
   }, [id, session]);
   useEffect(() => {
     const controller = new AbortController();
@@ -753,10 +812,13 @@ export function WatchPage() {
           theater={theater}
           mobile={mobilePlayer}
           onTheater={() => setTheater((value) => !value)}
+          onViewCount={(count) => setVideo(previous => previous && previous.id === id
+            ? { ...previous, views_count: Math.max(previous.views_count, count) } : previous)}
         />
       </div>
       <div className="watch-main">
         <h1>{video.title}</h1>
+        <p className="watch-views" aria-live="polite">{formatViews(video.views_count)}</p>
         <div className="watch-author-row">
           <WatchChannel
             key={`${video.id}:${session?.user.id || "guest"}`}

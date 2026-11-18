@@ -70,6 +70,7 @@ class ModerationService:
         with self.factory() as db:
             ModerationRepository(db).actor(user_id)
             query = select(Report, Channel.user_id).join_from(Report, Video).join(Channel)
+            query = query.where(Video.deleted_at.is_(None))
             if status != "all":
                 query = query.where(Report.status == status)
             if after:

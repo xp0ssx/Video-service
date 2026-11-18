@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Avatar, Icon } from "./Icon";
+import { formatViews } from "./views";
 export type VideoCardData = {
   id: string;
+  views_count?: number;
   title: string;
   duration_ms?: number | null;
   published_at?: string;
@@ -83,6 +85,7 @@ export function VideoCard({
               </Link>
             </p>
           )}
+          <p className="card-views">{formatViews(video.views_count)}</p>
           {video.published_at && (
             <p className="card-date">
               <time dateTime={video.published_at}>

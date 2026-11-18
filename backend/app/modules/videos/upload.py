@@ -53,14 +53,9 @@ async def receive(request, service, user_id, video_id):
             if not size:
                 code = "empty_file"
                 raise HTTPException(422, "Пустой файл")
-            key = f"sources/{video_id}/{token}/original"
             code = "storage_unavailable"
-            await run_in_threadpool(storage.upload, path, key, "application/octet-stream")
-            head = await run_in_threadpool(storage.head, key)
-            if head["ContentLength"] != size:
-                raise HTTPException(503, "Хранилище не подтвердило размер файла")
             return await run_in_threadpool(
-                service.accepted, user_id, video_id, token, key, size, sha.hexdigest()
+                service.store_source, storage, path, user_id, video_id, token, size, sha.hexdigest()
             )
     except HTTPException:
         raise

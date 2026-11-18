@@ -22,6 +22,7 @@ def video_view(video):
         "id": video.id,
         "title": video.title,
         "duration_ms": video.duration_ms,
+        "views_count": video.views_count,
         "thumbnail_url": f"/api/videos/{video.id}/thumbnail",
         "watch_url": f"/watch/{video.id}",
     }
@@ -52,7 +53,7 @@ class PlaylistService:
             query = (
                 select(Video, PlaylistItem.position)
                 .join(PlaylistItem, PlaylistItem.video_id == Video.id)
-                .where(PlaylistItem.playlist_id == identifier)
+                .where(PlaylistItem.playlist_id == identifier, Video.deleted_at.is_(None))
             )
             if not studio:
                 query = query.where(watch_listing(user_id))
@@ -114,8 +115,12 @@ class PlaylistService:
                 for item in items:
                     item.position = order[item.video_id]
             elif action == "add":
-                video = db.get(Video, video_id)
-                if video is None or video.channel_id != row.channel_id:
+                video = db.scalar(select(Video).where(Video.id == video_id).with_for_update())
+                if (
+                    video is None
+                    or video.deleted_at is not None
+                    or video.channel_id != row.channel_id
+                ):
                     raise HTTPException(404, "Собственное видео не найдено")
                 if db.get(PlaylistItem, (identifier, video_id)) is None:
                     position = db.scalar(

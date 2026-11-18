@@ -1,3 +1,5 @@
+import re
+import secrets
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -6,12 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.router import csrf, current, database, origin
 from app.modules.auth.service import digest
+from app.modules.videos.deletion import delete_owned
 from app.modules.videos.feed import FeedService
 from app.modules.videos.media import byte_range
 from app.modules.videos.schemas import CreateVideo, UpdateVideo
 from app.modules.videos.service import VideoService
 from app.modules.videos.streaming import MediaResponse
 from app.modules.videos.upload import receive
+from app.modules.videos.views import StartView, ViewProgress, ViewService, viewer_key
 
 router = APIRouter(tags=["videos"])
 
@@ -45,6 +49,60 @@ Writer = Annotated[UUID, Depends(writer)]
 Owner = Annotated[UUID, Depends(owner)]
 Viewer = Annotated[UUID | None, Depends(viewer)]
 Service = Annotated[VideoService, Depends(service)]
+
+
+def view_actor(request: Request, user: Viewer):
+    if user is not None:
+        with request.app.state.database.session_factory() as db:
+            row = AuthRepository(db).session(digest(request.cookies.get("session_id", "")))
+            if row is None:
+                raise HTTPException(401, "Требуется вход")
+            csrf(row, request.headers.get("X-CSRF-Token"))
+    return user
+
+
+ViewActor = Annotated[UUID | None, Depends(view_actor)]
+
+
+def guest_token(request):
+    token = request.cookies.get("video_viewer", "")
+    return token if re.fullmatch(r"[A-Za-z0-9_-]{43}", token) else None
+
+
+@router.post("/videos/{video_id}/views", dependencies=[Depends(origin)])
+def start_view(
+    video_id: UUID, data: StartView, request: Request, response: Response, user: ViewActor
+):
+    token = guest_token(request)
+    fresh = user is None and token is None
+    if fresh:
+        token = secrets.token_urlsafe(32)
+    value = ViewService(request.app.state.database.session_factory).start(
+        user, viewer_key(user, token), video_id, data
+    )
+    if fresh:
+        response.set_cookie(
+            "video_viewer",
+            token,
+            max_age=30 * 86400,
+            httponly=True,
+            secure=request.app.state.settings.cookie_secure,
+            samesite="lax",
+            path="/",
+        )
+    return value
+
+
+@router.post("/videos/{video_id}/views/{session_id}", dependencies=[Depends(origin)])
+def progress_view(
+    video_id: UUID, session_id: UUID, data: ViewProgress, request: Request, user: ViewActor
+):
+    token = guest_token(request)
+    if user is None and token is None:
+        raise HTTPException(404, "Сессия просмотра недоступна")
+    return ViewService(request.app.state.database.session_factory).progress(
+        user, viewer_key(user, token), video_id, session_id, data
+    )
 
 
 @router.get("/videos")
@@ -102,6 +160,27 @@ def watch(video_id: UUID, user: Viewer, videos: Service):
 @router.patch("/videos/{video_id}", dependencies=[Depends(origin)])
 def patch(video_id: UUID, data: UpdateVideo, user: Writer, videos: Service):
     return videos.patch(user, video_id, data)
+
+
+@router.delete(
+    "/videos/{video_id}",
+    status_code=204,
+    dependencies=[Depends(origin)],
+    summary="Удалить собственное видео",
+    description=(
+        "204 после фиксации необратимого удаления и задания очистки. Доступ закрыт сразу; "
+        "очистка S3 повторяется worker. Повтор владельца возвращает 204. "
+        "Чужое или неизвестное видео — 404, включая admin/moderator. "
+        "Требуются сессия, Origin и CSRF."
+    ),
+    responses={
+        401: {"description": "Нет сессии"},
+        403: {"description": "Origin или CSRF"},
+        404: {"description": "Видео не найдено"},
+    },
+)
+def delete_video(video_id: UUID, user: Writer, videos: Service):
+    delete_owned(videos.factory, user, video_id)
 
 
 @router.get("/videos/{video_id}/access")

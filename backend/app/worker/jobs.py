@@ -45,6 +45,10 @@ class Jobs:
                 .with_for_update(skip_locked=True)
             ):
                 video = db.scalar(select(Video).where(Video.id == job.video_id).with_for_update())
+                if video.deleted_at is not None:
+                    job.status, job.lease_token, job.lease_expires_at = "failed", None, None
+                    job.last_error_code = "video_deleted"
+                    continue
                 job.status = "queued" if job.attempts < 3 else "failed"
                 job.last_error_code = "lease_expired"
                 job.lease_token, job.lease_expires_at = None, None
@@ -53,7 +57,11 @@ class Jobs:
                 video.error_stage, video.error_code = "processing", "lease_expired"
             for video in db.scalars(
                 select(Video)
-                .where(Video.status == "uploading", Video.upload_expires_at <= now)
+                .where(
+                    Video.status == "uploading",
+                    Video.upload_expires_at <= now,
+                    Video.deleted_at.is_(None),
+                )
                 .with_for_update(skip_locked=True)
             ):
                 video.status, video.error_stage, video.error_code = (
@@ -79,6 +87,11 @@ class Jobs:
             if job is None:
                 return None
             video = db.scalar(select(Video).where(Video.id == job.video_id).with_for_update())
+            if video.deleted_at is not None:
+                job.status, job.lease_token, job.lease_expires_at = "failed", None, None
+                job.last_error_code = "video_deleted"
+                db.commit()
+                return None
             source = db.scalar(
                 select(VideoAsset).where(
                     VideoAsset.video_id == video.id, VideoAsset.kind == "source"
@@ -130,6 +143,7 @@ class Jobs:
             or job.lease_token != token
             or job.lease_expires_at is None
             or job.lease_expires_at <= now
+            or db.scalar(select(Video.deleted_at).where(Video.id == job.video_id)) is not None
         ):
             raise LostLease
         return now
@@ -146,6 +160,8 @@ class Jobs:
             # Job -> Video remains the publication/recovery lock order. Revalidate
             # after the final wait; holding the job lock alone does not stop time.
             now = self._lease_time(db, job, claim["token"])
+            if video.deleted_at is not None:
+                raise LostLease
             for asset in assets:
                 db.add(VideoAsset(video_id=video.id, **asset))
             for key in ("duration_ms", "width", "height"):
@@ -161,6 +177,8 @@ class Jobs:
             job = self.locked(db, claim)
             video = db.scalar(select(Video).where(Video.id == job.video_id).with_for_update())
             now = self._lease_time(db, job, claim["token"])
+            if video.deleted_at is not None:
+                raise LostLease
             retry = not terminal and job.attempts < 3
             job.status = "queued" if retry else "failed"
             job.last_error_code = code

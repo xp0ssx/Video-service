@@ -36,9 +36,11 @@ Python/npm-зависимости и базовые Docker-образы закр
 **Повтор той же команды сохраняет секреты, записи и медиа.** Named volumes не
 удаляются. Несовпадающий существующий S3-конфиг не перезаписывается. Если `.env` потерян, но volumes проекта уже существуют, установщик
 откажет вместо генерации несовместимых секретов: восстановите исходную конфигурацию.
-Не переименовывайте Compose-проект действующего стенда. Для отдельного окружения
-в другом каталоге есть `--project NAME --port 18080`; параметры фиксируются
-при первом запуске, конфликт с существующим `.env` приводит к отказу.
+Не переименовывайте Compose-проект действующего стенда. Для временного испытания
+в отдельном каталоге есть `--project NAME --port PORT`; параметры фиксируются
+при первом запуске, конфликт с существующим `.env` приводит к отказу. Это не
+способ завести второй постоянный стенд: после испытания его контейнеры и сети
+нужно убрать без удаления volumes по [правилам разработки](docs/development.md).
 `--min-free-mb` позволяет задать порог места для стенда с уже кэшированными
 образами; снижение стандартного порога 8192 МиБ не подходит для чистой установки.
 
@@ -83,6 +85,55 @@ Compose и Python 3.10+: `python3 scripts/prepare_env.py`, затем
 - Readiness: <http://localhost:8080/health/ready> — реальное подключение к БД, наличие применённой миграции и авторизованный доступ к S3 bucket и heartbeat worker не старше 45 секунд.
 
 Только Nginx публикует порт, только на `127.0.0.1`. PostgreSQL/S3/служебные интерфейсы наружу не открываются. Для удалённого стенда используйте SSH-туннель; публичное HTTPS-развёртывание требует отдельной настройки.
+
+## Единственный основной стенд и обновление
+
+**Compose project `video-service`, адрес <http://localhost:8080> — единственный
+постоянно работающий стенд разработки и ручной проверки.** Дополнительные
+окружения допустимы только на время изолированного теста. Успешный E2E на другом
+порту не обновляет `localhost:8080`.
+
+Команды ниже выполняются из корня этого репозитория с существующей `.env`.
+После установки через sudo используйте `sudo docker ...`. Не меняйте credentials,
+имя проекта и volumes при обновлении. `restart` не пересобирает образ и не
+подхватывает изменённые исходники: runtime-контейнеры используют собранный код.
+
+После изменения frontend:
+
+```bash
+docker compose -f compose.yaml -p video-service build web
+docker compose -f compose.yaml -p video-service up -d --no-deps --wait --wait-timeout 120 web
+```
+
+После изменения backend соберите общий образ API/worker. Если добавлена миграция,
+перед использованием новой функциональности выполните штатный upgrade новым
+образом; для изменений схемы заранее проверьте совместимость и согласованную
+резервную копию по разделу ниже. Без новой миграции шаг `run ... migrate` пропустите:
+
+```bash
+docker compose -f compose.yaml -p video-service build api
+# Только при новой Alembic-миграции, после сборки и до обновления API/worker:
+docker compose -f compose.yaml -p video-service run --rm --no-deps migrate
+docker compose -f compose.yaml -p video-service up -d --no-deps --wait --wait-timeout 180 api worker
+docker compose -f compose.yaml -p video-service exec -T worker python -m app.worker.health
+python3 scripts/check_http.py --base-url http://localhost:8080
+```
+
+Общий backend-образ требует согласованного обновления API и worker, в частности
+при изменениях очереди, удаления и просмотров. Эти команды сохраняют
+`video-service_postgres_data` и `video-service_media_data`; `down` для основного
+проекта при обычном обновлении не нужен. Для frontend после обновления также
+выполните HTTP-проверку и перезагрузите открытую вкладку.
+
+На текущем хосте ранее обнаружены сломанные ссылки Docker Desktop на buildx и
+credential helper. Для сборки уже подготовлен отдельный локальный Docker config:
+`docker --config .local/stand-update/docker compose -f compose.yaml -p video-service build api web`.
+Используйте его только там, где он существует; пользовательский Docker config
+менять не требуется. Чистая Ubuntu устанавливается официальной командой
+`sudo bash scripts/deploy.sh --demo`, как описано выше.
+
+Правила временных окружений, автоматический cleanup тестов и ограничения
+проверок основного стенда: [docs/development.md](docs/development.md).
 
 ## Компоненты и данные
 
@@ -205,11 +256,13 @@ VM: фактический объём проверок указан в прот�
 docker compose config --quiet
 python3 scripts/check_http.py
 python3 -m unittest discover -s scripts/tests -v
-python3 scripts/run_checks.py
-python3 scripts/run_checks.py run --rm --no-deps checks ruff check app migrations tests
-python3 scripts/run_checks.py run --rm --no-deps checks ruff format --check app migrations tests
-docker compose --profile checks run --build --rm frontend-checks
 ```
+
+Интеграционные проверки, Ruff и frontend build запускайте в одноразовом проекте
+с автоматическим cleanup по [готовой команде](docs/development.md#temporary-checks).
+Один `run --rm` удаляет только контейнер команды и оставляет зависимости:
+`scripts/run_checks.py` сам их не останавливает. Прямой запуск без обёртки
+в основном проекте оставляет `test-db`/`test-storage` работающими и не применяется.
 
 `scripts/run_checks.py` создаёт отдельные случайные тестовые credentials в
 `.local/tests/` (права файлов 0600) и запускает `checks`. Тесты используют
@@ -218,6 +271,8 @@ credentials и не подключены к рабочим volumes. Тестов
 в tmpfs; после их остановки следующий запуск применит миграции заново.
 Повторный запуск сохраняет тестовые credentials. Не запускайте `checks` напрямую:
 без тестового env-файла его конфигурация намеренно не содержит паролей.
+Миграции, fault injection и разрушительные сценарии выполняются только в этом
+изолированном окружении; рабочие PostgreSQL/SeaweedFS для них не используются.
 
 Pytest проверяет health/OpenAPI/конфигурацию, регистрацию/сессии/роли и настоящий
 S3 (PUT/HEAD/GET/Range, анонимный отказ). Интеграционные тесты дополнительно
@@ -230,6 +285,10 @@ credentials окружения, DSN и секретов ответов TestClien
 `frontend-checks` выполняет отдельный TypeScript typecheck и production build. Runtime-образ `web` также собирает frontend из `package-lock.json`. Python-зависимости закреплены в `requirements.lock` / `requirements-dev.lock` с хешами; исходные диапазоны находятся в `.in`. Базовые Docker-образы закреплены digest.
 
 Проверка сохранности S3 при перезапуске:
+
+Следующий сценарий прерывает storage; выполняйте его только на временном
+изолированном стенде, из его отдельного каталога с собственной `.env` и уникальным
+Compose project name. Основной `video-service` для имитации отказов не используется.
 
 ```bash
 docker compose run --rm --no-deps --user "$(id -u):$(id -g)" -v "$PWD/.local/checks:/checks" api python -m app.cli.storage_probe write

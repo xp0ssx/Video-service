@@ -1,5 +1,6 @@
 import { Avatar, Icon } from "../../components/Icon";
 import { VideoCard, Thumbnail } from "../../components/VideoCard";
+import { formatViews } from "../../components/views";
 import type { VideoCardData } from "../../components/VideoCard";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -579,6 +580,7 @@ function PlaylistContent({ id }: { id: string }) {
                 <div>
                   <h2>{item.title}</h2>
                   <p className="muted">{value.username}</p>
+                  <p className="muted">{formatViews(item.views_count)}</p>
                 </div>
               </Link>
             </li>
@@ -737,7 +739,7 @@ function PlaylistEditor({ id }: { id: string }) {
                 </div>
               )}
               <span className="editor-video-title">
-                {item.title} ({statusLabel[item.status || ""] || "Недоступно"})
+                {item.title} ({statusLabel[item.status || ""] || "Недоступно"}) · {formatViews(item.views_count)}
               </span>
               <div className="editor-item-actions">
                 <button

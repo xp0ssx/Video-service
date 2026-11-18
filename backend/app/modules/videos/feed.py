@@ -24,6 +24,7 @@ class FeedRepository:
                 Video.id,
                 Video.title,
                 Video.duration_ms,
+                Video.views_count,
                 Video.published_at,
                 Channel.id.label("channel_id"),
                 Channel.title.label("channel_title"),
@@ -67,6 +68,7 @@ class FeedService:
                         "id": row.id,
                         "title": row.title,
                         "duration_ms": row.duration_ms,
+                        "views_count": row.views_count,
                         "published_at": row.published_at,
                         "channel": {
                             "id": row.channel_id,

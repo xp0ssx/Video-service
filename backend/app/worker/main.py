@@ -10,7 +10,10 @@ from app.core.config import get_settings
 from app.db.session import Database
 from app.infrastructure.storage import Storage
 from app.infrastructure.transcoder import LostLease, ProcessingError, checksum, transcode
+from app.modules.videos.deletion import storage_writer
+from app.modules.videos.views import ViewService
 from app.worker.cleanup import Cleanup
+from app.worker.deletions import Deletions
 from app.worker.jobs import Jobs, Lease
 
 logger = logging.getLogger(__name__)
@@ -20,11 +23,13 @@ class Worker:
     def __init__(self, settings, factory, storage):
         self.settings, self.storage = settings, storage
         self.jobs = Jobs(factory)
+        self.deletions = Deletions(factory, storage)
         self.cancel = threading.Event()
 
     def run_once(self):
         self.jobs.heartbeat()
         self.jobs.recover()
+        self.deletions.run()
         claim = self.jobs.claim()
         if claim is None:
             return False
@@ -46,33 +51,37 @@ class Worker:
                     ):
                         raise ProcessingError("source_corrupt")
                     info, playback, thumbnail = transcode(source, directory, self.cancel)
-                    assets = []
-                    for kind, path, mime in [
-                        ("playback", playback, "video/mp4"),
-                        ("thumbnail", thumbnail, "image/jpeg"),
-                    ]:
+                    with storage_writer(self.jobs.factory, claim["video_id"]):
+                        assets = []
+                        for kind, path, mime in [
+                            ("playback", playback, "video/mp4"),
+                            ("thumbnail", thumbnail, "image/jpeg"),
+                        ]:
+                            if self.cancel.is_set():
+                                raise LostLease
+                            key = f"processed/{claim['video_id']}/{claim['token']}/{path.name}"
+                            self.storage.upload(path, key, mime)
+                            if self.storage.head(key)["ContentLength"] != path.stat().st_size:
+                                raise OSError("Stored output mismatch")
+                            assets.append(
+                                {
+                                    "kind": kind,
+                                    "object_key": key,
+                                    "size_bytes": path.stat().st_size,
+                                    "sha256": checksum(path),
+                                    "content_type": mime,
+                                }
+                            )
                         if self.cancel.is_set():
                             raise LostLease
-                        key = f"processed/{claim['video_id']}/{claim['token']}/{path.name}"
-                        self.storage.upload(path, key, mime)
-                        if self.storage.head(key)["ContentLength"] != path.stat().st_size:
-                            raise OSError("Stored output mismatch")
-                        assets.append(
-                            {
-                                "kind": kind,
-                                "object_key": key,
-                                "size_bytes": path.stat().st_size,
-                                "sha256": checksum(path),
-                                "content_type": mime,
-                            }
-                        )
-                    if self.cancel.is_set():
-                        raise LostLease
-                    self.jobs.publish(claim, info, assets)
+                        self.jobs.publish(claim, info, assets)
         except LostLease:
             logger.warning("Processing lease lost; publication rejected")
         except ProcessingError as error:
-            self.jobs.fail(claim, error.code, True)
+            try:
+                self.jobs.fail(claim, error.code, True)
+            except LostLease:
+                logger.warning("Processing lease lost; failure result rejected")
         except Exception:
             # Credentials/SQL/subprocess diagnostics are deliberately not logged.
             try:
@@ -115,6 +124,7 @@ def main():
                 if time.monotonic() >= cleanup_at:
                     cleanup_at = time.monotonic() + 3600
                     Cleanup(database.session_factory, settings, storage).run()
+                    ViewService(database.session_factory).cleanup()
             except Exception:
                 logger.warning("Worker iteration unavailable; will retry")
             stop.wait(2)
