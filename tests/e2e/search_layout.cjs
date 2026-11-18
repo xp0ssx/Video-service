@@ -18,11 +18,12 @@ const base='http://localhost:8080';
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:1000});
       await page.goto(base+'/results?q='+'w'.repeat(200));
-      await page.getByRole('button',{name:'Выйти',exact:true}).waitFor();
+      await page.getByRole('button',{name:'Аккаунт',exact:true}).waitFor();
       await page.locator('.video-card').nth(2).waitFor();
       for(const query of ['w'.repeat(200),'short']){
         if(query==='short'){
-          await page.getByRole('searchbox',{name:'Поиск видео'}).fill(query);
+          if (!await page.getByRole('searchbox',{name:'Поиск видео'}).isVisible()) await page.getByRole('button',{name:'Открыть поиск',exact:true}).click();
+    await page.getByRole('searchbox',{name:'Поиск видео'}).fill(query);
           await page.getByRole('button',{name:'Найти видео'}).click();
           await page.getByRole('heading',{name:'Короткий результат 1',exact:true}).waitFor();
         }
@@ -30,12 +31,13 @@ const base='http://localhost:8080';
         const measured=await page.evaluate(()=>{
           const rect=selector=>document.querySelector(selector).getBoundingClientRect();
           const overlaps=(a,b)=>a.left<b.right&&b.left<a.right&&a.top<b.bottom&&b.top<a.bottom;
-          const heading=rect('.page-heading h1'),label=rect('.category-label'),main=rect('main'),sidebar=rect('.sidebar'),grid=rect('.video-grid'),account=rect('.account'),search=rect('.search-bar'),brand=rect('.brand'),header=rect('.topbar');
+          const heading=rect('.page-heading h1'),main=rect('main'),sidebar=rect('.sidebar'),grid=rect('.video-grid'),account=rect('.account'),search=rect('.search-bar'),brand=rect('.brand'),header=rect('.topbar');
           const cards=[...document.querySelectorAll('.video-card')].map(node=>node.getBoundingClientRect());
-          return {scrollWidth:document.documentElement.scrollWidth,width:innerWidth,contained:heading.left>=main.left&&heading.right<=main.right&&account.top>=header.top&&account.bottom<=header.bottom,noOverlaps:!overlaps(main,sidebar)&&!overlaps(brand,account)&&!overlaps(search,account)&&!(label.width&&overlaps(heading,label))&&heading.bottom<=grid.top&&cards.every((a,i)=>cards.every((b,j)=>i===j||!overlaps(a,b)))};
+          return {scrollWidth:document.documentElement.scrollWidth,width:innerWidth,contained:heading.left>=main.left&&heading.right<=main.right&&(!account.width||(account.top>=header.top&&account.bottom<=header.bottom)),noOverlaps:!overlaps(main,sidebar)&&!overlaps(brand,account)&&!overlaps(search,account)&&heading.bottom<=grid.top&&cards.every((a,i)=>cards.every((b,j)=>i===j||!overlaps(a,b)))};
         });
         assert(measured.scrollWidth<=measured.width,JSON.stringify(measured));
         assert(measured.contained&&measured.noOverlaps,JSON.stringify(measured));
+        if(width===390&&await page.getByRole('button',{name:'Закрыть поиск',exact:true}).isVisible())await page.getByRole('button',{name:'Закрыть поиск',exact:true}).click();
         if(process.env.ARTIFACT_DIR)await page.screenshot({path:path.join(process.env.ARTIFACT_DIR,`search-${query==='short'?'short':'long'}-${width}.png`),fullPage:true});
         console.log(`OK ${query==='short'?'short query':'200 w query'}, username 32, ${width}px: scrollWidth=${measured.scrollWidth}, no overlaps`);
       }

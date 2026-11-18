@@ -22,14 +22,14 @@ const json = (status, body) => ({status, contentType: 'application/json', body: 
         await page.getByLabel('Пароль').fill('synthetic-test-password');
         await page.getByRole('button', {name: action === 'register' ? 'Зарегистрироваться' : 'Войти', exact: true}).click();
         await page.waitForURL('http://localhost:8080/');
-        await page.getByRole('button', {name: 'Выйти', exact: true}).waitFor();
+        await page.getByRole('button', {name: 'Аккаунт', exact: true}).waitFor();
         let responses = 0;
         page.on('response', response => { if (response.url().endsWith('/api/auth/session')) responses++; });
         for (const route of pending) await route.fulfill(json(lateStatus, lateStatus === 401 ? {message: 'Требуется вход'} : {...session, user: {...session.user, username: 'old_user'}}));
         await page.waitForTimeout(150);
         assert(responses > 0, 'Delayed HTTP response must actually arrive');
-        assert((await page.locator('.account').innerText()).includes('new_user'), 'Stale restoration replaced current session');
-        assert.equal(await page.getByRole('button', {name: 'Выйти', exact: true}).count(), 1);
+        assert((await page.locator('.account-trigger [data-avatar]').getAttribute('data-avatar')) === 'new_user', 'Stale restoration replaced current session');
+        assert.equal(await page.getByRole('button', {name: 'Аккаунт', exact: true}).count(), 1);
         console.log(`OK ${action}: late restore ${lateStatus} ignored`);
         await page.close();
       }
@@ -39,14 +39,15 @@ const json = (status, body) => ({status, contentType: 'application/json', body: 
       await page.route('**/api/auth/session', route => route.fulfill(json(200, session)));
       await page.route('**/api/auth/logout', route => route.fulfill(json(status, {message: 'Logout denied'})));
       await page.goto('http://localhost:8080/');
+      await page.getByRole('button', {name: 'Аккаунт', exact: true}).click();
       await page.getByRole('button', {name: 'Выйти', exact: true}).click();
       if (status === 401) {
         await page.getByRole('link', {name: 'Войти', exact: true}).waitFor();
-        assert.equal(await page.getByRole('button', {name: 'Выйти', exact: true}).count(), 0);
+        assert.equal(await page.getByRole('button', {name: 'Аккаунт', exact: true}).count(), 0);
       } else {
         await page.getByRole('alert').waitFor();
-        assert((await page.locator('.account').innerText()).includes('new_user'));
-        assert.equal(await page.getByRole('button', {name: 'Выйти', exact: true}).count(), 1);
+        assert((await page.locator('.account-trigger [data-avatar]').getAttribute('data-avatar')) === 'new_user');
+        assert.equal(await page.getByRole('button', {name: 'Аккаунт', exact: true}).count(), 1);
       }
       console.log(`OK logout ${status}: ${status === 401 ? 'session cleared' : 'session retained'}`);
       await page.close();

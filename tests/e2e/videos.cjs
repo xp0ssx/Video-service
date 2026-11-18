@@ -21,7 +21,7 @@ const base = 'http://localhost:8080';
     await page.getByLabel('Имя пользователя').fill(username);
     await page.getByLabel('Пароль').fill(randomUUID());
     await page.getByRole('button',{name:'Зарегистрироваться',exact:true}).click();
-    await page.getByRole('button',{name:'Выйти',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Аккаунт',exact:true}).waitFor();
     const auth=await (await owner.request.get(base+'/api/auth/session')).json();
     const headers={'Origin':base,'X-CSRF-Token':auth.csrf_token};
     const registration=await recipient.request.post(base+'/api/auth/register',{headers:{Origin:base},data:{username:recipientName,email:recipientName+'@example.com',password:randomUUID()}});

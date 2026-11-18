@@ -20,6 +20,7 @@ const card=(id,title)=>({id,title,channel:{id:'channel',title:'Канал',usern
       return route.fulfill(json(200,{items:[card('beta','Новый результат')],next_cursor:null}));
     });
     await page.goto(base+'/results?q=alpha');await started;
+    if (!await page.getByRole('searchbox',{name:'Поиск видео'}).isVisible()) await page.getByRole('button',{name:'Открыть поиск',exact:true}).click();
     await page.getByRole('searchbox',{name:'Поиск видео'}).fill('beta');await page.getByRole('button',{name:'Найти видео'}).click();
     await page.getByRole('link',{name:'Смотреть: Новый результат',exact:true}).waitFor();
     for(const route of pending)await route.fulfill(json(200,{items:[card('alpha','Устаревший результат')],next_cursor:null}));
@@ -46,14 +47,14 @@ const card=(id,title)=>({id,title,channel:{id:'channel',title:'Канал',usern
     });
     await comments.route(`**/api/videos/${videoId}/like`,route=>route.fulfill(json(403,{message:'Недопустимый CSRF-токен'})));
     await comments.goto(base+'/watch/'+videoId);
-    await comments.getByRole('button',{name:'Выйти',exact:true}).waitFor();
+    await comments.getByRole('button',{name:'Аккаунт',exact:true}).waitFor();
     for(const width of [390,1440]){
       await comments.setViewportSize({width,height:1000});
       assert(await comments.evaluate(()=>{
         const account=document.querySelector('.account').getBoundingClientRect();
         const header=document.querySelector('.topbar').getBoundingClientRect();
         const search=document.querySelector('.search-bar').getBoundingClientRect();
-        return document.documentElement.scrollWidth<=innerWidth&&account.top>=header.top&&account.bottom<=header.bottom&&(innerWidth>700||account.bottom<=search.top);
+        return document.documentElement.scrollWidth<=innerWidth&&account.top>=header.top&&account.bottom<=header.bottom&&(innerWidth>600||search.width===0);
       }),`Account with maximum username length overflows or overlaps search at ${width}px`);
     }
     console.log('OK maximum-length username fits header at 390/1440 without overlapping search');
@@ -67,7 +68,7 @@ const card=(id,title)=>({id,title,channel:{id:'channel',title:'Канал',usern
     assert.deepEqual(await comments.locator('.comment-body').allTextContents(),['Старый комментарий','Средний комментарий','Новый комментарий']);
     await comments.getByRole('button',{name:'Нравится',exact:true}).click();await comments.getByRole('alert').filter({hasText:'CSRF'}).waitFor();
     assert.equal(await comments.getByRole('button',{name:'Нравится',exact:true}).getAttribute('aria-pressed'),'false');
-    assert.equal(await comments.getByRole('button',{name:'Выйти',exact:true}).count(),1);
+    assert.equal(await comments.getByRole('button',{name:'Аккаунт',exact:true}).count(),1);
     console.log('OK late comment list preserves new post, chronological merging, pagination and 403 state');
   }finally{await browser.close()}
 })().catch(error=>{console.error(error.message);process.exit(1)});

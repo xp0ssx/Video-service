@@ -3,7 +3,6 @@ const {chromium}=require('playwright-core');
 const {randomUUID}=require('node:crypto');
 const assert=require('node:assert/strict');
 const path=require('node:path');
-const os=require('node:os');
 const base=process.env.BASE_URL||'http://localhost:8080';
 (async()=>{
   const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox','--disable-dev-shm-usage','--autoplay-policy=no-user-gesture-required']});
@@ -24,9 +23,11 @@ const base=process.env.BASE_URL||'http://localhost:8080';
     for(const width of [1440,390]){
       await page.setViewportSize({width,height:1000});
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),`${name}: horizontal overflow at ${width}`);
+      if (!await page.getByRole('searchbox',{name:'Поиск видео'}).isVisible()) await page.getByRole('button',{name:'Открыть поиск',exact:true}).click();
       assert(await page.getByRole('searchbox',{name:'Поиск видео'}).isVisible());
       assert(await page.getByRole('button',{name:'Найти видео'}).isVisible());
-      await page.screenshot({path:path.join(process.env.ARTIFACT_DIR||os.tmpdir(),`social-${name}-${width}.png`),fullPage:true});
+      if (width===390) await page.getByRole('button',{name:'Закрыть поиск',exact:true}).click();
+      if(process.env.ARTIFACT_DIR)await page.screenshot({path:path.join(process.env.ARTIFACT_DIR,`social-${name}-${width}.png`),fullPage:true});
     }
   }
   try{
@@ -39,7 +40,7 @@ const base=process.env.BASE_URL||'http://localhost:8080';
     await page.getByLabel('Имя пользователя').fill(username);
     await page.getByLabel('Пароль').fill(randomUUID());
     await page.getByRole('button',{name:'Зарегистрироваться',exact:true}).click();
-    await page.getByRole('button',{name:'Выйти',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Аккаунт',exact:true}).waitFor();
     await page.goto(base+'/upload');
     await page.getByLabel('Название',{exact:true}).fill(title);
     await page.getByLabel('Описание',{exact:true}).fill('Synthetic end-to-end clip');
@@ -76,6 +77,7 @@ const base=process.env.BASE_URL||'http://localhost:8080';
     const auth=await(await context.request.get(base+'/api/auth/session')).json();
     const headers={Origin:base,'X-CSRF-Token':auth.csrf_token};
     for(let n=0;n<2;n++)assert.deepEqual(await(await context.request.put(`${base}/api/videos/${id}/like`,{headers})).json(),{likes_count:1,liked_by_me:true});
+    if (!await page.getByRole('searchbox',{name:'Поиск видео'}).isVisible()) await page.getByRole('button',{name:'Открыть поиск',exact:true}).click();
     await page.getByRole('searchbox',{name:'Поиск видео'}).fill(title.toUpperCase());
     await page.getByRole('button',{name:'Найти видео'}).click();
     await page.getByRole('link',{name:'Смотреть: '+title,exact:true}).waitFor();
