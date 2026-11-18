@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import { useAuth } from "../auth/Auth";
+import { HttpError } from "../../api/client";
 
 type Evidence = { position_ms: number; rate: number };
 type ViewState = { session_id: string; threshold_ms: number; completed: boolean; views_count: number };
@@ -13,48 +14,70 @@ export function useVideoViews(
   id: string,
   onCount?: (count: number) => void,
 ) {
-  const { session } = useAuth();
+  const { session, loading, restoreError } = useAuth();
   const onCountRef = useRef(onCount);
   onCountRef.current = onCount;
   const csrf = session?.csrf_token;
   useEffect(() => {
     const el = media.current;
-    if (!el) return;
+    // The session cookie can already exist while its CSRF token is still loading.
+    if (!el || loading || restoreError) return;
     const controller = new AbortController();
     let state: ViewState | undefined, sequence = 0, stopped = false;
     let queue = Promise.resolve(), lastSent = 0;
+    let failures = 0, retryAfter = 0, generation = 0, recovering = false;
     const evidence = (): Evidence => ({
       position_ms: Math.max(0, Math.round(el.currentTime * 1000)),
       rate: el.playbackRate,
     });
     const post = async (path: string, body: object): Promise<ViewState> => {
       const response = await fetch(`/api/videos/${id}/views${path}`, {
-        method: "POST", credentials: "same-origin", signal: controller.signal,
+        method: "POST", credentials: "same-origin",
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
         headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) },
         body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error("View registration unavailable");
+      if (!response.ok) throw new HttpError(response.status, "View registration unavailable");
       return response.json();
     };
     const send = (event: PlaybackEvent) => {
-      if (stopped || controller.signal.aborted) return;
+      if (stopped || controller.signal.aborted || performance.now() < retryAfter) return;
       const data = evidence();
       // Only an actual playing event can initiate a session.
-      if (!state && event !== "resume" && sequence === 0) return;
+      // After a transient failure, live progress may establish a fresh baseline.
+      if (!state && sequence === 0 && event !== "resume" &&
+          !(recovering && event === "progress")) return;
       const currentSequence = ++sequence;
+      const currentGeneration = generation;
       lastSent = performance.now();
       queue = queue.then(async () => {
-        if (stopped || controller.signal.aborted) return;
+        if (stopped || controller.signal.aborted || currentGeneration !== generation) return;
         if (!state) state = await post("", data);
         else state = await post(`/${state.session_id}`, { ...data, sequence: currentSequence, event });
         if (!controller.signal.aborted && state.completed) {
           stopped = true;
           onCountRef.current?.(state.views_count);
         }
-      }).catch(() => {
-        // Analytics failure must never interrupt playback or produce retries on
-        // every render. A later page visit can attempt registration again.
-        stopped = true;
+      }).catch((error: unknown) => {
+        if (controller.signal.aborted || currentGeneration !== generation) return;
+        const transient = error instanceof HttpError
+          ? error.status === 408 || error.status === 429 || error.status >= 500
+          : error instanceof TypeError || (error instanceof DOMException && error.name === "TimeoutError");
+        failures++;
+        generation++;
+        // Discard queued evidence and uncertain intervals (e.g. a lost pause or
+        // response). Never credit outage time. At most three event-driven retries
+        // per mounted player, spaced 1/2/4 seconds apart; no timer or polling.
+        state = undefined;
+        sequence = 0;
+        recovering = transient && failures <= 3;
+        stopped = !recovering;
+        retryAfter = performance.now() + 1000 * 2 ** (failures - 1);
+        // Status only: do not log cookies, tokens, request bodies or session IDs.
+        console.warn("Video view registration unavailable", {
+          status: error instanceof HttpError ? error.status : "network",
+          recovery: recovering ? "next playback event" : "stopped",
+        });
       });
     };
     const playing = () => send("resume");
@@ -75,6 +98,8 @@ export function useVideoViews(
     el.addEventListener("seeking", seek);
     el.addEventListener("seeked", seeked);
     el.addEventListener("ratechange", rate);
+    // Restore accounting if auth finished loading during real playback.
+    if (!el.paused && !el.seeking && el.readyState >= 2) playing();
     return () => {
       controller.abort();
       el.removeEventListener("playing", playing);
@@ -86,5 +111,5 @@ export function useVideoViews(
       el.removeEventListener("seeked", seeked);
       el.removeEventListener("ratechange", rate);
     };
-  }, [id, csrf, media]);
+  }, [id, session?.user.id, csrf, loading, restoreError, media]);
 }

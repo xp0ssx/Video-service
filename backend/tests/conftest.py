@@ -69,7 +69,11 @@ def redact(text):
 
 
 def redact_report(report):
-    if report.longrepr:
+    if isinstance(report.longrepr, tuple):
+        # Pytest's skipped reporter requires (path, line, reason), not a string.
+        path, line, reason = report.longrepr
+        report.longrepr = (redact(path), line, redact(reason))
+    elif report.longrepr:
         report.longrepr = redact(str(report.longrepr))
     report.sections = [(name, redact(content)) for name, content in report.sections]
 

@@ -700,6 +700,8 @@ export function WatchPage() {
   const { session } = useAuth();
   const [video, setVideo] = useState<Video | null>(null);
   const [error, setError] = useState("");
+  const [retryRevision, setRetryRevision] = useState(0);
+  const [canRetry, setCanRetry] = useState(false);
   const [recommendations, setRecommendations] = useState<VideoCardData[]>([]),
     [recError, setRecError] = useState(""),
     [recLoading, setRecLoading] = useState(true),
@@ -720,27 +722,45 @@ export function WatchPage() {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setVideo(null);
+    // Keep public playback mounted when session restoration finishes. Private
+    // content must be revalidated on identity changes before it is shown again.
+    setVideo(previous => previous && previous.id === id && previous.visibility === "public" ? previous : null);
     setError("");
-    let unavailable = false, checking = false;
+    setCanRetry(false);
+    let unavailable = false, checking = false, failures = 0, succeeded = false;
     const markUnavailable = () => {
       unavailable = true;
+      setCanRetry(false);
       setVideo(null);
       setError("Видео не найдено или недоступно");
     };
     const check = async (initial = false) => {
-      if (checking || unavailable || controller.signal.aborted) return;
+      if (checking || unavailable || failures > 3 || controller.signal.aborted) return;
       checking = true;
       try {
         const value = await api(`/videos/${id}`, { signal: controller.signal });
-        if (!controller.signal.aborted && !unavailable) setVideo(previous =>
-          previous && previous.id === value.id
+        if (!controller.signal.aborted && !unavailable) {
+          setVideo(previous => previous && previous.id === value.id
             ? { ...value, views_count: Math.max(previous.views_count, value.views_count) }
             : value);
+          setError("");
+          setCanRetry(false);
+          succeeded = true;
+          failures = 0;
+        }
       } catch (failure) {
         if (!controller.signal.aborted) {
-          if (failure instanceof HttpError && failure.status === 404) markUnavailable();
-          else if (initial) setError((failure as Error).message);
+          const transient = failure instanceof HttpError
+            ? failure.status === 408 || failure.status === 429 || failure.status >= 500
+            : failure instanceof TypeError;
+          if (!transient) markUnavailable();
+          else {
+            failures++;
+            if (initial || !succeeded) {
+              setCanRetry(true);
+              setError("Не удалось загрузить видео. Сервис временно недоступен. Повторите попытку.");
+            }
+          }
         }
       } finally { checking = false; }
     };
@@ -765,7 +785,7 @@ export function WatchPage() {
       window.removeEventListener("storage", storageChanged);
       window.removeEventListener("focus", focused);
     };
-  }, [id, session]);
+  }, [id, session?.user.id, retryRevision]);
   useEffect(() => {
     const controller = new AbortController();
     setRecommendations([]);
@@ -790,6 +810,7 @@ export function WatchPage() {
       <div className="empty-state" role="alert">
         <h1>Видео недоступно</h1>
         <p>{error}</p>
+        {canRetry && <button onClick={() => setRetryRevision(value => value + 1)}>Повторить загрузку видео</button>}
         <Link className="button-link" to="/">
           На главную
         </Link>

@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 import {
   AuthProvider,
+  AuthRecovery,
   Account,
   AuthForm,
   useAuth,
@@ -215,6 +216,7 @@ function Shell() {
         </div>
       </aside>
       <main id="main" className="main-content" inert={drawer}>
+        <AuthRecovery />
         <Routes>
           <Route path="/moderation" element={<ModerationPage />} />
           <Route path="/admin" element={<AdminPage />} />

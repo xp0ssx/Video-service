@@ -137,3 +137,42 @@ psycopg.connect(host="127.0.0.1", port=1, user="test", dbname="test",
     assert token not in output
     assert dsn not in output
     assert "[REDACTED]" in output
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'def test_skip():\n    pytest.skip(os.environ["TEST_SESSION_TOKEN"])\n',
+        "@pytest.fixture(autouse=True)\ndef gate():\n"
+        '    pytest.skip(os.environ["TEST_SESSION_TOKEN"])\n'
+        "def test_skip():\n    pass\n",
+        '@pytest.mark.skip(reason=os.environ["TEST_SESSION_TOKEN"])\ndef test_skip():\n    pass\n',
+        'pytest.skip(os.environ["TEST_SESSION_TOKEN"], allow_module_level=True)\n',
+    ],
+    ids=["call", "fixture-setup", "marker", "collection"],
+)
+def test_skipped_reports_keep_structure_and_redact_credentials(tmp_path, source):
+    (tmp_path / "conftest.py").write_text(Path(__file__).with_name("conftest.py").read_text())
+    (tmp_path / "test_skip.py").write_text("import os\nimport pytest\n" + source)
+    # Collection-only skips otherwise exit 5 (no runnable tests).
+    (tmp_path / "test_pass.py").write_text("def test_pass():\n    pass\n")
+    token = "synthetic-skipped-reason-never-real"
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-ra", str(tmp_path)],
+        env={
+            **os.environ,
+            "RUN_INTEGRATION": "0",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+            "TEST_SESSION_TOKEN": token,
+        },
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "1 passed, 1 skipped" in output
+    assert "SKIPPED" in output
+    assert "[REDACTED]" in output
+    assert token not in output

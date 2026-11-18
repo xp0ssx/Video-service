@@ -18,11 +18,15 @@ type Session = {
 type AuthState = {
   session: Session | null;
   loading: boolean;
+  restoreError: string;
+  retryRestore: () => void;
   update: (value: Session | null) => void;
 };
 const AuthContext = createContext<AuthState>({
   session: null,
   loading: true,
+  restoreError: "",
+  retryRestore: () => {},
   update: () => {},
 });
 export const useAuth = () => useContext(AuthContext);
@@ -53,9 +57,12 @@ export async function request(path: string, init?: RequestInit) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreRevision, setRestoreRevision] = useState(0);
   const revision = useRef(0);
   const update = useCallback((value: Session | null) => {
     revision.current += 1;
+    setRestoreError("");
     setSession(value);
     setLoading(false);
   }, []);
@@ -64,26 +71,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const started = revision.current;
     const active = () =>
       !controller.signal.aborted && revision.current === started;
-    request("session", { signal: controller.signal })
-      .then((value) => {
-        if (active()) setSession(value);
-      })
-      .catch(() => {
-        if (active()) setSession(null);
-      })
-      .finally(() => {
-        if (active()) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setLoading(true);
+    setRestoreError("");
+    const restore = async (attempt = 0) => {
+      try {
+        const value = await request("session", {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+        });
+        if (active()) {
+          setSession(value);
+          setRestoreError("");
+          setLoading(false);
+        }
+      } catch (error) {
+        if (!active()) return;
+        // Only an explicit 401 establishes a guest. A service outage cannot
+        // tell us whether the HttpOnly session cookie is still authenticated.
+        if (error instanceof ApiError && error.status === 401) {
+          setSession(null);
+          setRestoreError("");
+          setLoading(false);
+          return;
+        }
+        const transient = error instanceof ApiError
+          ? error.status === 408 || error.status === 429 || error.status >= 500
+          : error instanceof TypeError || (error instanceof DOMException && error.name === "TimeoutError");
+        setRestoreError("Не удалось восстановить сессию. Повторите попытку.");
+        if (transient && attempt < 3) {
+          timer = setTimeout(() => { if (active()) void restore(attempt + 1); }, 1000 * 2 ** attempt);
+        } else setLoading(false);
+      }
+    };
+    void restore();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [restoreRevision]);
   return (
-    <AuthContext.Provider value={{ session, loading, update }}>
+    <AuthContext.Provider value={{ session, loading, restoreError,
+      retryRestore: () => setRestoreRevision(value => value + 1), update }}>
       {children}
     </AuthContext.Provider>
   );
 }
+export function AuthRecovery() {
+  const { restoreError, loading, retryRestore } = useAuth();
+  if (!restoreError) return null;
+  return <div className="empty-state" role="alert">
+    <p>{restoreError}</p>
+    <button disabled={loading} onClick={retryRestore}>Повторить восстановление сессии</button>
+  </div>;
+}
+
 export function Account() {
-  const { session, loading, update } = useAuth();
+  const { session, loading, restoreError, update } = useAuth();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
@@ -112,7 +155,7 @@ export function Account() {
   }, [location.pathname, location.search]);
   return (
     <div className="account">
-      {!loading && !session && (
+      {!loading && !restoreError && !session && (
         <Link className="sign-in" to="/login">
           <Icon name="user" size={20} />
           <span>Войти</span>
