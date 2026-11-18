@@ -8,10 +8,8 @@ import { api, HttpError } from "../../api/client";
 import type { Page } from "../../api/client";
 import { useAuth } from "../auth/Auth";
 
-type Comment = {id: string; body: string; created_at: string; author: {id: string; username: string}}
-function merge(previous: Comment[], incoming: Comment[]) {
-  return [...new Map([...previous, ...incoming].map(item => [item.id, item])).values()].sort((a,b) => a.created_at === b.created_at ? a.id < b.id ? -1 : a.id === b.id ? 0 : 1 : a.created_at < b.created_at ? -1 : 1)
-}
+import { CommentThread, mergeComments as merge } from "./CommentThread";
+import type { Comment } from "./CommentThread";
 type LikeState = { likes_count: number; liked_by_me: boolean };
 export function VideoInteractions({
   id,
@@ -97,9 +95,9 @@ export function VideoInteractions({
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!session) return;
-    const text = body.trim();
-    if (!text || text.length > 2000) {
+    if (!session || postBusy) return;
+    const text = body;
+    if (!text.trim() || Array.from(text).length > 2000) {
       setError("Комментарий должен содержать от 1 до 2000 символов");
       return;
     }
@@ -163,6 +161,7 @@ export function VideoInteractions({
       )}
       {error && <p role="alert">{error}</p>}
       <h2>Комментарии</h2>
+      <p className="comments-order muted">Сначала старые</p>
       {session && (
         <form className="comment-form" onSubmit={submit}>
           <Avatar name={session.user.username} size={40} />
@@ -174,7 +173,6 @@ export function VideoInteractions({
                 aria-label="Ваш комментарий"
                 placeholder="Введите комментарий"
                 required
-                maxLength={2000}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 disabled={postBusy}
@@ -201,22 +199,12 @@ export function VideoInteractions({
       {notice && <p role="status">{notice}</p>}
       <ol className="comments-list">
         {comments.map((comment) => (
-          <li key={comment.id} className="comment">
-            <Avatar name={comment.author.username} size={40} />
-            <div className="comment-copy">
-              <div className="comment-meta">
-                <strong>{comment.author.username}</strong>
-                <time dateTime={comment.created_at}>
-                  {new Date(comment.created_at).toLocaleDateString("ru-RU", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </time>
-              </div>
-              <p className="comment-body">{comment.body}</p>
-            </div>
-          </li>
+          <CommentThread
+            key={comment.id}
+            videoId={id}
+            comment={comment}
+            onUnavailable={onUnavailable}
+          />
         ))}
       </ol>
       {loading && (

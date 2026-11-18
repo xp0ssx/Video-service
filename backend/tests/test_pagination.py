@@ -37,6 +37,12 @@ def test_malformed_cursor_is_validation_error(data):
     assert result.value.status_code == 422
 
 
-def test_literal_like_pattern_and_comment_trimming():
+def test_literal_like_pattern_and_comment_preserves_whitespace():
     assert title_pattern("a!%_\\") == "%a!!!%!_\\%"
-    assert CreateComment(body="  text\n").body == "text"
+    assert CreateComment(body="  text\n").body == "  text\n"
+
+
+@pytest.mark.parametrize("body", [" ", "\n\t\r", "\u2003\u00a0"])
+def test_comment_rejects_whitespace_only(body):
+    with pytest.raises(ValueError):
+        CreateComment(body=body)

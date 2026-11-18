@@ -1197,6 +1197,64 @@ summary::-webkit-details-marker {
   line-height: 1.55;
   margin: 4px 0 0;
 }
+.comment-thread {
+  padding-bottom: 24px;
+  min-width: 0;
+}
+.comment-thread .comment {
+  padding-bottom: 0;
+}
+.comment-meta a {
+  overflow-wrap: anywhere;
+}
+.comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.comment-actions .text-button,
+.replies-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 18px;
+  font-size: 12px;
+}
+.comment-like[aria-pressed="true"] {
+  color: var(--link);
+  background: var(--hover);
+}
+.comment-like[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+.comment-discussion {
+  margin-left: clamp(32px, 4vw, 56px);
+  min-width: 0;
+}
+.replies-toggle {
+  color: var(--link);
+  margin-top: 4px;
+  max-width: 100%;
+}
+.comment-replies {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+.comment-replies .comment-reply {
+  gap: 12px;
+  padding-bottom: 16px;
+}
+.reply-form {
+  margin: 12px 0;
+  gap: 12px;
+}
+.reply-form textarea {
+  min-height: 58px;
+}
 /* Channels, playlists and owner editor. */
 .channel-page {
   max-width: 1600px;

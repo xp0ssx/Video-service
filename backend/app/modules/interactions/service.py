@@ -8,9 +8,12 @@ from app.modules.interactions.repository import InteractionRepository
 from app.modules.videos.models import Video
 
 
-def comment_view(comment, username):
+def comment_view(comment, username, likes=None, replies_count=0):
     return {
         "id": comment.id,
+        "parent_id": comment.parent_id,
+        "replies_count": replies_count,
+        **(likes or {"likes_count": 0, "liked_by_me": False}),
         "body": comment.body,
         "created_at": comment.created_at,
         "author": {"id": comment.user_id, "username": username},
@@ -44,15 +47,46 @@ class InteractionService:
             db.commit()
             return result
 
-    def comments(self, video_id, user_id, cursor, limit):
+    def require_comment(self, repo, video_id, comment_id):
+        comment = repo.comment(video_id, comment_id)
+        if comment is None:
+            raise HTTPException(404, "Комментарий не найден")
+        return comment
+
+    def comment_like(self, video_id, comment_id, user_id, enabled):
+        with self.factory() as db:
+            self.available(db, video_id, user_id, True)
+            repo = InteractionRepository(db)
+            self.require_comment(repo, video_id, comment_id)
+            repo.set_comment_like(comment_id, user_id, enabled)
+            result = repo.comment_like_state(comment_id, user_id)
+            db.commit()
+            return result
+
+    def comments(self, video_id, user_id, cursor, limit, parent_id=None):
         with self.factory() as db:
             self.available(db, video_id, user_id)
+            repo = InteractionRepository(db)
+            if parent_id is not None:
+                parent = self.require_comment(repo, video_id, parent_id)
+                if parent.parent_id is not None:
+                    raise HTTPException(404, "Ветка не найдена")
             scope = f"comments:{video_id}"
+            if parent_id is not None:
+                scope += f":replies:{parent_id}"
             after = decode_cursor(cursor, scope)
-            rows = InteractionRepository(db).comments(video_id, after, limit)
+            rows = repo.comments(video_id, after, limit, parent_id)
             page = rows[:limit]
+            likes, replies = repo.comment_states(
+                video_id, [comment.id for comment, _ in page], user_id
+            )
             return {
-                "items": [comment_view(comment, username) for comment, username in page],
+                "items": [
+                    comment_view(
+                        comment, username, likes.get(comment.id), replies.get(comment.id, 0)
+                    )
+                    for comment, username in page
+                ],
                 "next_cursor": encode_cursor(page[-1][0].created_at, page[-1][0].id, scope)
                 if len(rows) > limit
                 else None,
@@ -61,7 +95,12 @@ class InteractionService:
     def add_comment(self, video_id, user_id, data):
         with self.factory() as db:
             self.available(db, video_id, user_id, True)
-            comment, username = InteractionRepository(db).add_comment(video_id, user_id, data.body)
+            repo = InteractionRepository(db)
+            parent_id = None
+            if data.parent_id is not None:
+                parent = self.require_comment(repo, video_id, data.parent_id)
+                parent_id = parent.parent_id or parent.id
+            comment, username = repo.add_comment(video_id, user_id, data.body, parent_id)
             result = comment_view(comment, username)
             db.commit()
             return result
