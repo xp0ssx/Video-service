@@ -18,5 +18,7 @@ test-results/
 *.zip
 .DS_Store
 
-# Original AI session journals can contain confidential data; never publish them.
+# Ignore AI session journals except the reviewed submission snapshot.
 *.jsonl
+!/ai-evidence/codex/sessions/**/*.jsonl
+!/ai-evidence/codex/archived_sessions/*.jsonl

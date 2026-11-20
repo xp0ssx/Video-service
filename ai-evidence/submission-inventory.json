@@ -1,0 +1,17 @@
+{
+  "project": "Video-service",
+  "git_head": "6949035a2500ea41bde280eccc8ad02d5e36595c",
+  "git_branch": "main",
+  "git_tracked_files": 188,
+  "original_codex_jsonl_count": 74,
+  "original_codex_jsonl": "Unmodified copies, individually SHA256-checked against local source",
+  "agent_config": [
+    "codex/agent-config/config.toml",
+    "codex/agent-config/AGENTS.md",
+    "Video-service/AGENTS.md"
+  ],
+  "supplemental_system_skill_files": 5,
+  "supplemental_skills_note": "Available system skill instruction snapshots; direct use not confirmed",
+  "chatgpt_export_included": false,
+  "security_status": "Token-pattern matches found only in payload.encrypted_content; no complete PEM private keys or matches with scanned known runtime secrets. Not an exhaustive credential audit."
+}

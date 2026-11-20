@@ -1,0 +1,24 @@
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+personality = "pragmatic"
+
+[projects."/home/denis/Web-city"]
+trust_level = "trusted"
+
+[projects."/home/denis/Embeddable-ETL"]
+trust_level = "trusted"
+
+[projects."/home/denis/rope-platformer"]
+trust_level = "trusted"
+
+[projects."/home/denis/Study/test-task"]
+trust_level = "trusted"
+
+[projects."/home/denis/Study/t-start"]
+trust_level = "trusted"
+
+[projects."/home/denis/Video-service"]
+trust_level = "trusted"
+
+[plugins."github@openai-curated"]
+enabled = true
